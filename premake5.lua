@@ -1,5 +1,5 @@
 --[[
-To generate Visual Studio files (in vs2019/ or vs2022/ directory), run:
+To generate Visual Studio files (in vs2019/ or vs2026/ directory), run:
 scripts\premake-regenerate-vs-projects.ps1
 
 I'm using premake5 beta6 from https://premake.github.io/download/
@@ -158,7 +158,7 @@ end
 -- per-workspace setting that differ in clang-cl.exe vs cl.exe builds
 function clang_conf()
   filter "options:with-clang"
-    location "vs2022-clang"
+    location "vs2026-clang"
     toolset "clang"
     buildoptions {"-fms-compatibility", "-fms-extensions", "-Wno-microsoft-include", "-march=x86-64-v3", "-maes"}
 
@@ -227,7 +227,7 @@ workspace "SumatraPDF"
   location "this_is_invalid_location"
 
   filter "action:vs2022"
-    location "vs2022"
+    location "vs2026"
   filter {}
 
 
@@ -972,7 +972,7 @@ workspace "MakeLZSA"
   location "this_is_invalid_location"
 
   filter "action:vs2022"
-    location "vs2022"
+    location "vs2026"
   filter {}
 
   clang_conf()

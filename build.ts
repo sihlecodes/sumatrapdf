@@ -110,12 +110,12 @@ async function fixVirtualOverride(): Promise<void> {
 
 async function build(): Promise<void> {
   await unlink("./out/dbg64/SumatraPDF.exe").catch(() => {});
-  await $`msbuild .\\vs2022\\SumatraPDF.sln /t:SumatraPDF "/p:Configuration=Debug;Platform=x64" /m`;
+  await $`msbuild .\\vs2026\\SumatraPDF.sln /t:SumatraPDF "/p:Configuration=Debug;Platform=x64" /m`;
 }
 
 async function buildPreview2(): Promise<void> {
   await unlink("./out/dbg64/SumatraPDF.exe").catch(() => {});
-  await $`msbuild .\\vs2022\\SumatraPDF.sln /t:SumatraPDF "/p:Configuration=Debug;Platform=x64" /m`;
+  await $`msbuild .\\vs2026\\SumatraPDF.sln /t:SumatraPDF "/p:Configuration=Debug;Platform=x64" /m`;
 }
 
 const args = process.argv.slice(2);

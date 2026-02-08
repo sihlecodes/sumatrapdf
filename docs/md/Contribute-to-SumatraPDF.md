@@ -8,7 +8,7 @@ You'll need latest Visual Studio. A [free Community edition](https://www.visuals
 
 Get the sources from [https://github.com/sumatrapdfreader/sumatrapdf](https://github.com/sumatrapdfreader/sumatrapdf)
 
-Open `vs2022/SumatraPDF.sln` compile and run.
+Open `vs2026/SumatraPDF.sln` compile and run.
 
 Read more about our [build system](Build-system.md).
 
@@ -34,7 +34,7 @@ You should install Go ([https://golang.org/dl/](https://golang.org/dl/)).
 
 Many tasks are automated with Go program in `do` directory. Run `doit.bat` for easy running of that program. use different cmd-line args to trigger different functions.
 
-To build, use latest Visual Studio and open `vs2022\SumatraPDF.sln` solution. Look at different targets and configurations.
+To build, use latest Visual Studio and open `vs2026\\SumatraPDF.sln` solution. Look at different targets and configurations.
 
 Don't edit the solution directly. To learn how to make changes (add files, change compilation flags etc.) see info about [build system](Build-system.md).
 

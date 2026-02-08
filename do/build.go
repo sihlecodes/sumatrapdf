@@ -210,7 +210,7 @@ func buildLzsa() {
 	cleanPreserveSettings()
 
 	msbuildPath := detectMsbuildPathMust()
-	runExeLoggedMust(msbuildPath, `vs2022\MakeLZSA.sln`, `/t:MakeLZSA:Rebuild`, `/p:Configuration=Release;Platform=Win32`, `/m`)
+	runExeLoggedMust(msbuildPath, `vs2026\MakeLZSA.sln`, `/t:MakeLZSA:Rebuild`, `/p:Configuration=Release;Platform=Win32`, `/m`)
 
 	dir := filepath.Join("out", "rel32")
 	files := []string{"MakeLZSA.exe"}
@@ -351,7 +351,7 @@ func createManifestMust(manifestPath string) {
 
 // func build(config, platform string) {
 // 	msbuildPath := detectMsbuildPathMust()
-// 	slnPath := filepath.Join("vs2022", "SumatraPDF.sln")
+// 	slnPath := filepath.Join("vs2026", "SumatraPDF.sln")
 
 // 	dir := getOutDirForPlatform(platform)
 
@@ -473,7 +473,7 @@ func buildPreRelease(plat *Platform) {
 
 	buildAll := func(config, vsplatform string, outDir string) {
 		msbuildPath := detectMsbuildPathMust()
-		slnPath := filepath.Join("vs2022", "SumatraPDF.sln")
+		slnPath := filepath.Join("vs2026", "SumatraPDF.sln")
 
 		p := fmt.Sprintf(`/p:Configuration=%s;Platform=%s`, config, vsplatform)
 		runExeLoggedMust(msbuildPath, slnPath, `/t:test_util:Rebuild`, p, `/m`)
@@ -508,7 +508,7 @@ func buildCodeQL() {
 	detectVersionsCodeQL()
 	//cleanPreserveSettings()
 	msbuildPath := detectMsbuildPathMust()
-	runExeLoggedMust(msbuildPath, `vs2022\SumatraPDF.sln`, `/t:SumatraPDF:Rebuild`, `/p:Configuration=Release;Platform=x64`, `/m`)
+	runExeLoggedMust(msbuildPath, `vs2026\SumatraPDF.sln`, `/t:SumatraPDF:Rebuild`, `/p:Configuration=Release;Platform=x64`, `/m`)
 	revertBuildConfig()
 }
 
@@ -525,7 +525,7 @@ func buildSmoke(sign bool) {
 	panicIf(!fileExists(lzsa), "file '%s' doesn't exist", lzsa)
 
 	msbuildPath := detectMsbuildPathMust()
-	sln := `vs2022\SumatraPDF.sln`
+	sln := `vs2026\\SumatraPDF.sln`
 	t := `/t:SumatraPDF-dll:Rebuild;test_util:Rebuild`
 	p := `/p:Configuration=Release;Platform=x64`
 	runExeLoggedMust(msbuildPath, sln, t, p, `/m`)
@@ -545,7 +545,7 @@ func buildSmoke(sign bool) {
 
 func buildTestUtil() {
 	msbuildPath := detectMsbuildPathMust()
-	slnPath := filepath.Join("vs2022", "SumatraPDF.sln")
+	slnPath := filepath.Join("vs2026", "SumatraPDF.sln")
 
 	p := `/p:Configuration=Release;Platform=x64`
 	runExeLoggedMust(msbuildPath, slnPath, `/t:test_util:Rebuild`, p, `/m`)
@@ -580,7 +580,7 @@ func buildCiDaily() {
 	for _, plat := range platforms {
 		platform := plat.vsplatform
 		printBBuildDur := makePrintDuration(fmt.Sprintf("buidling pre-release %s version %s", platform, ver))
-		slnPath := filepath.Join("vs2022", "SumatraPDF.sln")
+		slnPath := filepath.Join("vs2026", "SumatraPDF.sln")
 		p := `/p:Configuration=Release;Platform=` + platform
 		// t := `/t:SumatraPDF:Rebuild;SumatraPDF-dll:Rebuild`
 		t := `/t:SumatraPDF;SumatraPDF-dll`

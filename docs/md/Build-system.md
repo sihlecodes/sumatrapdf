@@ -2,7 +2,7 @@
 
 Our build system uses [Premake5.](https://premake.github.io/) For convenience we have `premake5.exe` binary in `bin` directory.
 
-Premake generates Visual Studio solution in directory `vs2022` from `premake5.lua` file. Generated solution files are stored in the repository for convenience.
+Premake generates Visual Studio solution in directory `vs2026` from `premake5.lua` file. Generated solution files are stored in the repository for convenience.
 
 ## When to run premake
 
