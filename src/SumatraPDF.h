@@ -6,6 +6,11 @@ struct AnnotCreateArgs;
 #define CANVAS_CLASS_NAME L"SUMATRA_PDF_CANVAS"
 #define FRAME_CLASS_NAME L"SUMATRA_PDF_FRAME"
 
+// Logical sidebar panel indices
+constexpr int kPanelBookmarks = 0;
+constexpr int kPanelFavorites = 1;
+constexpr int kPanelAnnotations = 2;
+
 constexpr const char* kWebsiteURL = "https://www.sumatrapdfreader.org/";
 constexpr const char* kManualURL = "https://www.sumatrapdfreader.org/manual";
 constexpr const char* kContributeTranslationsURL = "https://www.sumatrapdfreader.org/docs/Contribute-translation";
@@ -116,6 +121,7 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose);
 void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites);
 void ToggleAnnotationsSidebar(MainWindow* win);
 void PopulateAnnotationsSidebar(MainWindow* win);
+void SelectSidebarPanel(MainWindow* win, int panel);
 void RememberFavTreeExpansionState(MainWindow* win);
 void LayoutTreeContainer(LabelWithCloseWnd* l, HWND hwndTree);
 void AdvanceFocus(MainWindow* win);

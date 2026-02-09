@@ -462,9 +462,7 @@ void ToggleFavorites(MainWindow* win) {
         SetSidebarVisibility(win, win->tocVisible, false);
     } else {
         // Select the favorites tab when showing favorites
-        if (win->hwndSidebarTabControl) {
-            TabCtrl_SetCurSel(win->hwndSidebarTabControl, 1);
-        }
+        SelectSidebarPanel(win, kPanelFavorites);
         SetSidebarVisibility(win, win->tocVisible, true);
         HwndSetFocus(win->favTreeView->hwnd);
     }

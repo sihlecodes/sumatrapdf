@@ -140,6 +140,9 @@ struct MainWindow {
 
     // tab control for switching between sidebar panels
     HWND hwndSidebarTabControl = nullptr;
+    // true when a document is loaded and all tabs (Bookmarks, Favorites, Annotations) are shown
+    // false on the home/about page where only Favorites tab is shown
+    bool sidebarDocMode = false;
 
     TabsCtrl* tabsCtrl = nullptr;
     bool tabsVisible = false;

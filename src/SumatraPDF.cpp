@@ -1493,13 +1493,95 @@ void ToggleAnnotationsSidebar(MainWindow* win) {
         // populate annotations list when made visible
         PopulateAnnotationsSidebar(win);
         // switch to the annotations tab
-        if (win->hwndSidebarTabControl) {
-            TabCtrl_SetCurSel(win->hwndSidebarTabControl, 2);
-        }
+        SelectSidebarPanel(win, kPanelAnnotations);
     }
     SetSidebarVisibility(win, win->tocVisible, gGlobalPrefs->showFavorites);
     if (win->annotsVisible && win->annotsListBox) {
         HwndSetFocus(win->annotsListBox->hwnd);
+    }
+}
+
+// Maps a visual tab index in the tab control to a logical panel index.
+// In doc mode: tab 0=Bookmarks, 1=Favorites, 2=Annotations
+// In home mode: tab 0=Favorites (only tab shown)
+static int SidebarTabToPanel(MainWindow* win, int tabIdx) {
+    if (!win->sidebarDocMode) {
+        // Home mode: only Favorites tab exists
+        return kPanelFavorites;
+    }
+    // Doc mode: direct mapping
+    return tabIdx;
+}
+
+// Maps a logical panel index to a visual tab index.
+// Returns -1 if the panel is not available in current mode.
+static int PanelToSidebarTab(MainWindow* win, int panel) {
+    if (!win->sidebarDocMode) {
+        if (panel == kPanelFavorites) {
+            return 0;
+        }
+        return -1;
+    }
+    return panel;
+}
+
+// Rebuilds the sidebar tab control items based on whether a document is loaded.
+// In home mode (no doc): only "Favorites" tab
+// In doc mode: "Bookmarks", "Favorites", "Annotations" tabs
+static void UpdateSidebarForDocState(MainWindow* win) {
+    if (!win || !win->hwndSidebarTabControl) {
+        return;
+    }
+    bool docLoaded = win->IsDocLoaded();
+    if (docLoaded == win->sidebarDocMode) {
+        return; // no change needed
+    }
+    win->sidebarDocMode = docLoaded;
+
+    // Remember which logical panel was selected
+    int oldVisualTab = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
+    int oldPanel = SidebarTabToPanel(win, oldVisualTab);
+
+    // Remove all existing tabs
+    TabCtrl_DeleteAllItems(win->hwndSidebarTabControl);
+
+    TCITEMW tci = {};
+    tci.mask = TCIF_TEXT;
+
+    if (docLoaded) {
+        // Doc mode: all 3 tabs
+        tci.pszText = (WCHAR*)L"Bookmarks";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
+        tci.pszText = (WCHAR*)L"Favorites";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 1, &tci);
+        tci.pszText = (WCHAR*)L"Annotations";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 2, &tci);
+    } else {
+        // Home mode: only Favorites tab
+        tci.pszText = (WCHAR*)L"Favorites";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
+    }
+
+    // Try to keep the same panel selected if still available
+    int newTab = PanelToSidebarTab(win, oldPanel);
+    if (newTab < 0) {
+        // Previous panel not available; default to Favorites
+        newTab = PanelToSidebarTab(win, kPanelFavorites);
+    }
+    if (newTab >= 0) {
+        TabCtrl_SetCurSel(win->hwndSidebarTabControl, newTab);
+    }
+}
+
+// Selects a logical panel in the sidebar tab control.
+// Maps the panel index to the correct visual tab index.
+void SelectSidebarPanel(MainWindow* win, int panel) {
+    if (!win || !win->hwndSidebarTabControl) {
+        return;
+    }
+    int tab = PanelToSidebarTab(win, panel);
+    if (tab >= 0) {
+        TabCtrl_SetCurSel(win->hwndSidebarTabControl, tab);
     }
 }
 
@@ -1509,30 +1591,31 @@ static void OnSidebarTabSelChanged(MainWindow* win) {
     if (!win || !win->hwndSidebarTabControl) {
         return;
     }
-    int idx = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
+    int visualIdx = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
+    int panel = SidebarTabToPanel(win, visualIdx);
 
     // When switching to the annotations tab, ensure it's populated
-    if (idx == 2) {
+    if (panel == kPanelAnnotations) {
         win->annotsVisible = true;
         PopulateAnnotationsSidebar(win);
     }
 
     // When switching to bookmarks, ensure ToC is loaded (if applicable)
-    if (idx == 0 && win->IsDocLoaded() && win->ctrl->HasToc()) {
+    if (panel == kPanelBookmarks && win->IsDocLoaded() && win->ctrl->HasToc()) {
         win->tocVisible = true;
         LoadTocTree(win);
     }
 
     // When switching to favorites, enable it
-    if (idx == 1) {
+    if (panel == kPanelFavorites) {
         gGlobalPrefs->showFavorites = true;
         PopulateFavTreeIfNeeded(win);
     }
 
-    // Update visibility of panels based on selected tab
-    HwndSetVisibility(win->hwndTocBox, idx == 0);
-    HwndSetVisibility(win->hwndFavBox, idx == 1);
-    HwndSetVisibility(win->hwndAnnotsBox, idx == 2);
+    // Update visibility of panels based on selected panel
+    HwndSetVisibility(win->hwndTocBox, panel == kPanelBookmarks);
+    HwndSetVisibility(win->hwndFavBox, panel == kPanelFavorites);
+    HwndSetVisibility(win->hwndAnnotsBox, panel == kPanelAnnotations);
 
     RelayoutFrame(win, false);
 }
@@ -1669,13 +1752,11 @@ static void CreateSidebar(MainWindow* win) {
 
         TCITEMW tci = {};
         tci.mask = TCIF_TEXT;
-        tci.pszText = (WCHAR*)L"Bookmarks";
-        TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
-        tci.pszText = (WCHAR*)L"Favorites";
-        TabCtrl_InsertItem(win->hwndSidebarTabControl, 1, &tci);
-        tci.pszText = (WCHAR*)L"Annotations";
-        TabCtrl_InsertItem(win->hwndSidebarTabControl, 2, &tci);
 
+        // Start in home mode (only Favorites tab)
+        // UpdateSidebarForDocState will rebuild tabs when a document is loaded
+        tci.pszText = (WCHAR*)L"Favorites";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
         TabCtrl_SetCurSel(win->hwndSidebarTabControl, 0);
     }
 
@@ -3858,15 +3939,16 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
         int panelDy = rc.dy - tabCtrlDy;
 
         // Position the currently selected panel
-        int selTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+        int visualTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+        int panel = SidebarTabToPanel(win, visualTab);
 
-        if (selTab == 0) {
+        if (panel == kPanelBookmarks) {
             Rect rToc(rc.x, panelY, toc.dx, panelDy);
             dh.MoveWindow(win->hwndTocBox, rToc);
-        } else if (selTab == 1) {
+        } else if (panel == kPanelFavorites) {
             Rect rFav(rc.x, panelY, toc.dx, panelDy);
             dh.MoveWindow(win->hwndFavBox, rFav);
-        } else if (selTab == 2) {
+        } else if (panel == kPanelAnnotations) {
             Rect rAnnots(rc.x, panelY, toc.dx, panelDy);
             dh.MoveWindow(win->hwndAnnotsBox, rAnnots);
         }
@@ -4908,6 +4990,9 @@ void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites) 
         showFavorites = false;
     }
 
+    // Update sidebar tabs based on whether a document is loaded
+    UpdateSidebarForDocState(win);
+
     if (tocVisible) {
         LoadTocTree(win);
         ReportIf(!win->tocLoaded);
@@ -4937,8 +5022,9 @@ void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites) 
     bool showAnnots = win->annotsVisible;
     bool showSidebar = tocVisible || showFavorites || showAnnots;
 
-    // Determine which tab is selected
-    int selTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+    // Determine which logical panel is selected
+    int visualTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+    int panel = SidebarTabToPanel(win, visualTab);
 
     // Show sidebar splitter and tab control when any panel is active
     HwndSetVisibility(win->sidebarSplitter->hwnd, showSidebar);
@@ -4948,10 +5034,10 @@ void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites) 
         HwndSetVisibility(win->hwndSidebarTabControl, showSidebar);
     }
 
-    // Show only the panel corresponding to the selected tab
-    HwndSetVisibility(win->hwndTocBox, showSidebar && selTab == 0);
-    HwndSetVisibility(win->hwndFavBox, showSidebar && selTab == 1);
-    HwndSetVisibility(win->hwndAnnotsBox, showSidebar && selTab == 2);
+    // Show only the panel corresponding to the selected logical panel
+    HwndSetVisibility(win->hwndTocBox, showSidebar && panel == kPanelBookmarks);
+    HwndSetVisibility(win->hwndFavBox, showSidebar && panel == kPanelFavorites);
+    HwndSetVisibility(win->hwndAnnotsBox, showSidebar && panel == kPanelAnnotations);
 
     // Hide the splitters between panels (no longer stacked)
     HwndSetVisibility(win->favSplitter->hwnd, false);
