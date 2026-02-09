@@ -141,7 +141,6 @@ static void OnFavSplitterMove(Splitter::MoveEvent*);
 static void OnAnnotsSplitterMove(Splitter::MoveEvent*);
 static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sidebarDx = -1);
 static int SidebarTabToPanel(MainWindow* win, int tabIdx);
-static void PreCacheAnnotations(WindowTab* tab);
 
 EBookUI* GetEBookUI() {
     if (!gGlobalPrefs)
@@ -1144,6 +1143,60 @@ static bool showTocByDefault(const char* path) {
     return showByDefault;
 }
 
+// Pre-cache annotations for a tab so switching to the annotations
+// sidebar tab doesn't stutter. Runs on a background thread, then
+// posts cache update back to the UI thread.
+struct PreCacheAnnotsData {
+    WindowTab* tab = nullptr;
+    Vec<Annotation*> annots;
+};
+
+// Check if a tab pointer is still valid (i.e. still in some window's tab list)
+static bool IsTabAlive(WindowTab* tab) {
+    for (MainWindow* win : gWindows) {
+        int idx = win->GetTabIdx(tab);
+        if (idx >= 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void PreCacheAnnotsFinish(PreCacheAnnotsData* d) {
+    AutoDelete delData(d);
+    WindowTab* tab = d->tab;
+    if (!IsTabAlive(tab)) {
+        return;
+    }
+    if (tab->annotsCacheValid) {
+        return; // already cached by someone else
+    }
+    tab->annotsCache.Clear();
+    int n = d->annots.Size();
+    for (int i = 0; i < n; i++) {
+        tab->annotsCache.Append(d->annots.at(i));
+    }
+    tab->annotsCacheValid = true;
+}
+
+static void PreCacheAnnotsThread(PreCacheAnnotsData* d) {
+    WindowTab* tab = d->tab;
+    DisplayModel* dm = tab ? tab->AsFixed() : nullptr;
+    if (!dm) {
+        delete d;
+        return;
+    }
+    EngineBase* engine = dm->GetEngine();
+    if (!engine || !EngineSupportsAnnotations(engine)) {
+        delete d;
+        return;
+    }
+    EngineMupdfGetAnnotations(engine, d->annots);
+
+    auto fn = MkFunc0(PreCacheAnnotsFinish, d);
+    uitask::Post(fn, "PreCacheAnnotsFinish");
+}
+
 // Document is represented as DocController. Replace current DocController (if any) with ctrl
 // in current tab.
 // meaning of the internal values of LoadArgs:
@@ -1359,13 +1412,15 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
         win->ctrl->SetInPresentation(true);
     }
 
-    // Pre-cache annotations in the background so switching to
+    // Pre-cache annotations on a background thread so switching to
     // the annotations tab is instant
     {
         WindowTab* currTab = win->CurrentTab();
         if (currTab) {
-            auto fn = MkFunc0(PreCacheAnnotations, currTab);
-            uitask::Post(fn, "PreCacheAnnotations");
+            auto d = new PreCacheAnnotsData();
+            d->tab = currTab;
+            auto fn = MkFunc0(PreCacheAnnotsThread, d);
+            RunAsync(fn, "PreCacheAnnotsThread");
         }
     }
 }
@@ -1476,26 +1531,6 @@ void InvalidateAnnotationsCache(WindowTab* tab) {
         tab->annotsCacheValid = false;
         tab->annotsCache.Clear();
     }
-}
-
-// Pre-cache annotations for a tab so switching to the annotations
-// sidebar tab doesn't stutter. Called as a deferred UI task after
-// document load.
-static void PreCacheAnnotations(WindowTab* tab) {
-    if (!tab || tab->annotsCacheValid) {
-        return;
-    }
-    DisplayModel* dm = tab->AsFixed();
-    if (!dm) {
-        return;
-    }
-    EngineBase* engine = dm->GetEngine();
-    if (!engine || !EngineSupportsAnnotations(engine)) {
-        return;
-    }
-    tab->annotsCache.Clear();
-    EngineMupdfGetAnnotations(engine, tab->annotsCache);
-    tab->annotsCacheValid = true;
 }
 
 void PopulateAnnotationsSidebar(MainWindow* win) {
@@ -2471,6 +2506,11 @@ void LoadModelIntoTab(WindowTab* tab) {
         SetSidebarVisibility(win, tab->showTocPresentation, gGlobalPrefs->showFavorites);
     } else {
         SetSidebarVisibility(win, tab->showToc, gGlobalPrefs->showFavorites);
+    }
+
+    // Update annotations sidebar when switching tabs
+    if (win->annotsVisible) {
+        PopulateAnnotationsSidebar(win);
     }
 
     DisplayModel* dm = win->AsFixed();
