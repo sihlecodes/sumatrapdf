@@ -140,6 +140,7 @@ static void OnSidebarSplitterMove(Splitter::MoveEvent*);
 static void OnFavSplitterMove(Splitter::MoveEvent*);
 static void OnAnnotsSplitterMove(Splitter::MoveEvent*);
 static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sidebarDx = -1);
+static int SidebarTabToPanel(MainWindow* win, int tabIdx);
 
 EBookUI* GetEBookUI() {
     if (!gGlobalPrefs)
@@ -525,7 +526,18 @@ void RememberDefaultWindowPosition(MainWindow* win) {
         gGlobalPrefs->windowState = WIN_STATE_NORMAL;
     }
 
-    gGlobalPrefs->sidebarDx = WindowRect(win->hwndTocBox).dx;
+    // Read sidebar width from whichever panel is currently visible
+    {
+        int vTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+        int p = SidebarTabToPanel(win, vTab);
+        HWND hwndPanel = win->hwndTocBox;
+        if (p == kPanelFavorites && win->hwndFavBox) {
+            hwndPanel = win->hwndFavBox;
+        } else if (p == kPanelAnnotations && win->hwndAnnotsBox) {
+            hwndPanel = win->hwndAnnotsBox;
+        }
+        gGlobalPrefs->sidebarDx = WindowRect(hwndPanel).dx;
+    }
 
     /* don't update the window's dimensions if it is maximized, mimimized or fullscreened */
     if (WIN_STATE_NORMAL == gGlobalPrefs->windowState && !IsIconic(win->hwndFrame) && !win->presentation) {
@@ -3880,7 +3892,16 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
     bool showAnnots = win->annotsVisible;
     bool showSidebar = tocVisible || showFavorites || showAnnots;
     if (showSidebar) {
-        Size toc = ClientRect(win->hwndTocBox).Size();
+        // Read width from whichever panel is currently visible, not just hwndTocBox
+        int visualTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+        int panel = SidebarTabToPanel(win, visualTab);
+        HWND hwndActivePanel = win->hwndTocBox;
+        if (panel == kPanelFavorites && win->hwndFavBox) {
+            hwndActivePanel = win->hwndFavBox;
+        } else if (panel == kPanelAnnotations && win->hwndAnnotsBox) {
+            hwndActivePanel = win->hwndAnnotsBox;
+        }
+        Size toc = ClientRect(hwndActivePanel).Size();
         if (sidebarDx > 0) {
             toc = Size(sidebarDx, rc.y);
         }
@@ -3910,20 +3931,11 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
         int panelY = rc.y + tabCtrlDy;
         int panelDy = rc.dy - tabCtrlDy;
 
-        // Position the currently selected panel
-        int visualTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
-        int panel = SidebarTabToPanel(win, visualTab);
-
-        if (panel == kPanelBookmarks) {
-            Rect rToc(rc.x, panelY, toc.dx, panelDy);
-            dh.MoveWindow(win->hwndTocBox, rToc);
-        } else if (panel == kPanelFavorites) {
-            Rect rFav(rc.x, panelY, toc.dx, panelDy);
-            dh.MoveWindow(win->hwndFavBox, rFav);
-        } else if (panel == kPanelAnnotations) {
-            Rect rAnnots(rc.x, panelY, toc.dx, panelDy);
-            dh.MoveWindow(win->hwndAnnotsBox, rAnnots);
-        }
+        // Resize all panels to keep their widths in sync
+        Rect rPanel(rc.x, panelY, toc.dx, panelDy);
+        dh.MoveWindow(win->hwndTocBox, rPanel);
+        dh.MoveWindow(win->hwndFavBox, rPanel);
+        dh.MoveWindow(win->hwndAnnotsBox, rPanel);
 
         Rect rSplitH(rc.x + toc.dx, rc.y, kSplitterDx, rc.dy);
         dh.MoveWindow(win->sidebarSplitter->hwnd, rSplitH);
@@ -4896,9 +4908,18 @@ static void OnSidebarSplitterMove(Splitter::MoveEvent* ev) {
     // note: without the min/max(..., rToc.dx), the sidebar will be
     //       stuck at its width if it accidentally got too wide or too narrow
     Rect rFrame = ClientRect(win->hwndFrame);
-    Rect rToc = ClientRect(win->hwndTocBox);
-    int minDx = std::min(kSidebarMinDx, rToc.dx);
-    int maxDx = std::max(rFrame.dx / 2, rToc.dx);
+    // Read from whichever panel is currently visible
+    int visualTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+    int panel = SidebarTabToPanel(win, visualTab);
+    HWND hwndActivePanel = win->hwndTocBox;
+    if (panel == kPanelFavorites && win->hwndFavBox) {
+        hwndActivePanel = win->hwndFavBox;
+    } else if (panel == kPanelAnnotations && win->hwndAnnotsBox) {
+        hwndActivePanel = win->hwndAnnotsBox;
+    }
+    Rect rActive = ClientRect(hwndActivePanel);
+    int minDx = std::min(kSidebarMinDx, rActive.dx);
+    int maxDx = std::max(rFrame.dx / 2, rActive.dx);
     if (sidebarDx < minDx || sidebarDx > maxDx) {
         ev->resizeAllowed = false;
         return;
