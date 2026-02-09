@@ -930,6 +930,16 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     if (ew) {
         UpdateUIForSelectedAnnotation(ew, annot, setEditFocus);
         HwndMakeVisible(ew->hwnd);
+    } else if (annot) {
+        // Navigate to the annotation even when edit window is not open
+        DisplayModel* dm = tab->AsFixed();
+        if (dm) {
+            int annotPageNo = annot->pageNo;
+            int nPages = dm->PageCount();
+            if (annotPageNo <= nPages && !dm->PageVisible(annotPageNo)) {
+                dm->GoToPage(annotPageNo, true);
+            }
+        }
     }
     MainWindowRerender(win);
     ToolbarUpdateStateForWindow(win, false);
