@@ -50,6 +50,10 @@ struct WindowTab {
     Annotation* selectedAnnotation = nullptr;
     bool didScrollToSelectedAnnotation = false; // only automatically scroll once
 
+    // cached annotations for the sidebar; invalidated when annotations change
+    Vec<Annotation*> annotsCache;
+    bool annotsCacheValid = false;
+
     // TODO: arguably a hack
     bool ignoreNextAutoReload = false;
 

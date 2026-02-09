@@ -1987,6 +1987,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
             AnnotCreateArgs args{annotType, {}};
             annot = EngineMupdfCreateAnnotation(engine, pageNoUnderCursor, ptOnPage, &args);
             UpdateAnnotationsList(tab->editAnnotsWindow);
+            InvalidateAnnotationsCache(tab);
             PopulateAnnotationsSidebar(win);
             break;
         }

@@ -120,6 +120,7 @@ void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose);
 void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites);
 void ToggleAnnotationsSidebar(MainWindow* win);
 void PopulateAnnotationsSidebar(MainWindow* win);
+void InvalidateAnnotationsCache(WindowTab* tab);
 void SelectSidebarPanel(MainWindow* win, int panel);
 void RememberFavTreeExpansionState(MainWindow* win);
 void LayoutTreeContainer(HWND hwndTree);

@@ -141,6 +141,7 @@ static void OnFavSplitterMove(Splitter::MoveEvent*);
 static void OnAnnotsSplitterMove(Splitter::MoveEvent*);
 static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sidebarDx = -1);
 static int SidebarTabToPanel(MainWindow* win, int tabIdx);
+static void PreCacheAnnotations(WindowTab* tab);
 
 EBookUI* GetEBookUI() {
     if (!gGlobalPrefs)
@@ -1357,6 +1358,16 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
     if (!args->isNewWindow && win->presentation && win->ctrl) {
         win->ctrl->SetInPresentation(true);
     }
+
+    // Pre-cache annotations in the background so switching to
+    // the annotations tab is instant
+    {
+        WindowTab* currTab = win->CurrentTab();
+        if (currTab) {
+            auto fn = MkFunc0(PreCacheAnnotations, currTab);
+            uitask::Post(fn, "PreCacheAnnotations");
+        }
+    }
 }
 
 void ReloadDocument(MainWindow* win, bool autoRefresh) {
@@ -1460,6 +1471,33 @@ void ReloadDocument(MainWindow* win, bool autoRefresh) {
     DeleteFileState(fs);
 }
 
+void InvalidateAnnotationsCache(WindowTab* tab) {
+    if (tab) {
+        tab->annotsCacheValid = false;
+        tab->annotsCache.Clear();
+    }
+}
+
+// Pre-cache annotations for a tab so switching to the annotations
+// sidebar tab doesn't stutter. Called as a deferred UI task after
+// document load.
+static void PreCacheAnnotations(WindowTab* tab) {
+    if (!tab || tab->annotsCacheValid) {
+        return;
+    }
+    DisplayModel* dm = tab->AsFixed();
+    if (!dm) {
+        return;
+    }
+    EngineBase* engine = dm->GetEngine();
+    if (!engine || !EngineSupportsAnnotations(engine)) {
+        return;
+    }
+    tab->annotsCache.Clear();
+    EngineMupdfGetAnnotations(engine, tab->annotsCache);
+    tab->annotsCacheValid = true;
+}
+
 void PopulateAnnotationsSidebar(MainWindow* win) {
     if (!win || !win->annotsListBox) {
         return;
@@ -1477,14 +1515,18 @@ void PopulateAnnotationsSidebar(MainWindow* win) {
         return;
     }
 
-    Vec<Annotation*> annots;
-    EngineMupdfGetAnnotations(engine, annots);
+    // use cached annotations if available
+    if (!tab->annotsCacheValid) {
+        tab->annotsCache.Clear();
+        EngineMupdfGetAnnotations(engine, tab->annotsCache);
+        tab->annotsCacheValid = true;
+    }
 
     auto model = new ListBoxModelStrings();
-    int n = annots.Size();
+    int n = tab->annotsCache.Size();
     str::Str s;
     for (int i = 0; i < n; i++) {
-        auto annot = annots.at(i);
+        auto annot = tab->annotsCache.at(i);
         s.Reset();
         s.AppendFmt("page %d, ", annot->pageNo);
         TempStr name = AnnotationReadableNameTemp(annot->type);
@@ -1651,12 +1693,16 @@ static void AnnotsListBoxSelectionChanged(MainWindow* win) {
     if (!engine || !EngineSupportsAnnotations(engine)) {
         return;
     }
-    Vec<Annotation*> annots;
-    EngineMupdfGetAnnotations(engine, annots);
-    if (idx >= annots.Size()) {
+    // use cached annotations from tab
+    if (!tab->annotsCacheValid) {
+        tab->annotsCache.Clear();
+        EngineMupdfGetAnnotations(engine, tab->annotsCache);
+        tab->annotsCacheValid = true;
+    }
+    if (idx >= tab->annotsCache.Size()) {
         return;
     }
-    Annotation* annot = annots.at(idx);
+    Annotation* annot = tab->annotsCache.at(idx);
     SetSelectedAnnotation(tab, annot, false);
 }
 
@@ -1705,6 +1751,7 @@ static void CreateAnnotationsSidebar(MainWindow* win) {
         args.parent = win->hwndAnnotsBox;
         args.idealSizeLines = 5;
         args.font = GetAppFont();
+        args.exStyle = WS_EX_STATICEDGE;
         listBox->Create(args);
     }
     auto lbModel = new ListBoxModelStrings();
@@ -4772,6 +4819,7 @@ Annotation* MakeAnnotationsFromSelection(WindowTab* tab, AnnotCreateArgs* args) 
         annot->bounds = GetBounds(annot);
     }
     UpdateAnnotationsList(tab->editAnnotsWindow);
+    InvalidateAnnotationsCache(tab);
     PopulateAnnotationsSidebar(win);
 
     // copy selection to clipboard so that user can use Ctrl-V to set contents
@@ -6426,6 +6474,7 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
     }
     if (lastCreatedAnnot) {
         UpdateAnnotationsList(tab->editAnnotsWindow);
+        InvalidateAnnotationsCache(tab);
         PopulateAnnotationsSidebar(win);
         ShowEditAnnotationsWindow(tab);
         SetSelectedAnnotation(tab, lastCreatedAnnot);

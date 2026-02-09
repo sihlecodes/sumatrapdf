@@ -398,6 +398,7 @@ static bool StopDraggingAnnotation(MainWindow* win, int x, int y, bool aborted) 
         // logf(" new rect: x=%.2f, y=%.2f, dx=%.2f, dy=%.2f\n", r.x, r.y, r.dx, r.dy);
         SetRect(annot, r);
         NotifyAnnotationsChanged(win->CurrentTab()->editAnnotsWindow);
+        InvalidateAnnotationsCache(win->CurrentTab());
         PopulateAnnotationsSidebar(win);
         MainWindowRerender(win);
         ToolbarUpdateStateForWindow(win, true);
@@ -742,6 +743,7 @@ static bool StopAnnotationResize(MainWindow* win, int x, int y, bool aborted) {
     // The annotation has already been updated during mouse move,
     // just notify and update toolbar
     NotifyAnnotationsChanged(win->CurrentTab()->editAnnotsWindow);
+    InvalidateAnnotationsCache(win->CurrentTab());
     PopulateAnnotationsSidebar(win);
     MainWindowRerender(win);
     ToolbarUpdateStateForWindow(win, true);

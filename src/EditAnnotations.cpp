@@ -215,6 +215,7 @@ void DeleteAnnotationAndUpdateUI(WindowTab* tab, Annotation* annot) {
 #endif
     }
     // Always update sidebar (even if floating window is closed)
+    InvalidateAnnotationsCache(tab);
     PopulateAnnotationsSidebar(tab->win);
     SetSelectedAnnotation(tab, selectNext, false);
 }
@@ -952,6 +953,7 @@ void UpdateAnnotationsList(EditAnnotationsWindow* ew) {
     auto engine = GetEngineMupdf(ew);
     EngineMupdfGetAnnotations(engine, ew->annotations);
     RebuildAnnotationsListBox(ew);
+    InvalidateAnnotationsCache(ew->tab);
     PopulateAnnotationsSidebar(ew->tab->win);
 }
 

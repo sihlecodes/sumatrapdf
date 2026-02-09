@@ -319,6 +319,7 @@ struct ListBox : Wnd {
         HWND parent = nullptr;
         int idealSizeLines = 0;
         HFONT font = nullptr;
+        DWORD exStyle = 0;
     };
 
     struct DrawItemEvent {

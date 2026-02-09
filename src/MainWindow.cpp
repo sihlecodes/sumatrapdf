@@ -693,6 +693,12 @@ void UpdateControlsColors(MainWindow* win) {
     if (win->annotsSplitter) {
         win->annotsSplitter->SetColors(kColorNoChange, splitterCol);
     }
+
+    if (win->annotsListBox) {
+        SetWindowExStyle(win->annotsListBox->hwnd, WS_EX_STATICEDGE, !flatTreeWnd);
+        uint flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED;
+        SetWindowPos(win->annotsListBox->hwnd, nullptr, 0, 0, 0, 0, flags);
+    }
     // TODO: more work needed to to ensure consistent look of the ebook window:
     // - change the tree item text color
     // - change the tree item background color when selected (for both focused and non-focused cases)

@@ -41,14 +41,14 @@ HWND ListBox::Create(const CreateArgs& args) {
     cargs.className = L"LISTBOX";
     cargs.parent = args.parent;
     cargs.font = args.font;
+    cargs.exStyle = args.exStyle;
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/list-box-styles
-    cargs.style = WS_CHILD | WS_TABSTOP | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL;
+    cargs.style = WS_CHILD | WS_TABSTOP | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | WS_BORDER;
     cargs.style |= LBS_NOINTEGRALHEIGHT | LBS_NOTIFY;
     if (onDrawItem.IsValid()) {
         cargs.style |= LBS_OWNERDRAWFIXED;
     }
-    // args.style |= WS_BORDER;
     Wnd::CreateControl(cargs);
     SizeToIdealSize(this);
 

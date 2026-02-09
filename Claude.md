@@ -12,6 +12,4 @@ This creates ./out/dbg64/SumatraPDF.exe executable
 
 To debug run: `windbgx -Q -o -g ./out/dbg64/SumatraPDF.exe`
 
-After making a change to .cpp, .c or .h file (and before running build.ts), run clang-format on those files to reformat them in place
-
 When commiting changes also commit ailog.txt (if changed)
