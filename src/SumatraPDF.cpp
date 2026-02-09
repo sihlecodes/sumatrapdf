@@ -615,9 +615,7 @@ static void UpdateWindowRtlLayout(MainWindow* win) {
     // https://www.microsoft.com/middleeast/msdn/mirror.aspx
     HwndSetRtl(win->hwndFrame, isRTL);
     HwndSetRtl(win->hwndTocBox, isRTL);
-    HwndSetRtl(win->tocLabelWithClose->hwnd, isRTL);
     HwndSetRtl(win->hwndFavBox, isRTL);
-    HwndSetRtl(win->favLabelWithClose->hwnd, isRTL);
     HwndSetRtl(win->favTreeView->hwnd, isRTL);
     HwndSetRtl(win->hwndReBar, isRTL);
     HwndSetRtl(win->hwndToolbar, isRTL);
@@ -1651,16 +1649,10 @@ static void AnnotsListBoxSelectionChanged(MainWindow* win) {
 }
 
 // Position label with close button and listbox within their parent container.
-static void LayoutAnnotsContainer(LabelWithCloseWnd* l, HWND hwndListBox) {
+static void LayoutAnnotsContainer(HWND hwndListBox) {
     HWND hwndContainer = GetParent(hwndListBox);
-    Size labelSize = l->GetIdealSize();
     Rect rc = WindowRect(hwndContainer);
-    int dy = rc.dy;
-    int y = 0;
-    MoveWindow(l->hwnd, y, 0, rc.dx, labelSize.dy, TRUE);
-    dy -= labelSize.dy;
-    y += labelSize.dy;
-    MoveWindow(hwndListBox, 0, y, rc.dx, dy, TRUE);
+    MoveWindow(hwndListBox, 0, 0, rc.dx, rc.dy, TRUE);
 }
 
 static WNDPROC gWndProcAnnotsBox = nullptr;
@@ -1678,14 +1670,11 @@ static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
     switch (msg) {
         case WM_SIZE:
             if (win->annotsListBox) {
-                LayoutAnnotsContainer(win->annotsLabelWithClose, win->annotsListBox->hwnd);
+                LayoutAnnotsContainer(win->annotsListBox->hwnd);
             }
             break;
 
         case WM_COMMAND:
-            if (LOWORD(wp) == IDC_ANNOTS_LABEL_WITH_CLOSE) {
-                ToggleAnnotationsSidebar(win);
-            }
             break;
     }
     return CallWindowProc(gWndProcAnnotsBox, hwnd, msg, wp, lp);
@@ -1697,19 +1686,6 @@ static void CreateAnnotationsSidebar(MainWindow* win) {
     DWORD dwStyle = WS_CHILD | WS_CLIPCHILDREN;
     win->hwndAnnotsBox =
         CreateWindowW(WC_STATIC, L"", dwStyle, 0, 0, dx, 0, win->hwndFrame, (HMENU) nullptr, h, nullptr);
-
-    auto l = new LabelWithCloseWnd();
-    {
-        LabelWithCloseCreateArgs args;
-        args.parent = win->hwndAnnotsBox;
-        args.cmdId = IDC_ANNOTS_LABEL_WITH_CLOSE;
-        args.font = GetDefaultGuiFont(true, false);
-        l->Create(args);
-    }
-
-    win->annotsLabelWithClose = l;
-    l->SetPaddingXY(2, 2);
-    l->SetLabel(_TRA("Annotations"));
 
     auto listBox = new ListBox();
     {
@@ -1797,10 +1773,6 @@ static void UpdateToolbarSidebarText(MainWindow* win) {
     UpdateToolbarPageText(win, -1);
     UpdateToolbarFindText(win);
     UpdateToolbarButtonsToolTipsForWindow(win);
-
-    win->tocLabelWithClose->SetLabel(_TRA("Bookmarks"));
-    win->favLabelWithClose->SetLabel(_TRA("Favorites"));
-    win->annotsLabelWithClose->SetLabel(_TRA("Annotations"));
 }
 
 static MainWindow* CreateMainWindow() {

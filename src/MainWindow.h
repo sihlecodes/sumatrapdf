@@ -6,7 +6,6 @@ struct LinkHandler;
 struct StressTest;
 class SumatraUIAutomationProvider;
 struct FrameRateWnd;
-struct LabelWithCloseWnd;
 struct ListBox;
 struct Splitter;
 struct Tooltip;
@@ -109,7 +108,6 @@ struct MainWindow {
     HWND hwndTocBox = nullptr;
     UINT_PTR tocBoxSubclassId = 0;
 
-    LabelWithCloseWnd* tocLabelWithClose = nullptr;
     TreeView* tocTreeView = nullptr;
 
     // whether the current tab's ToC has been loaded into the tree
@@ -121,7 +119,6 @@ struct MainWindow {
 
     // state related to favorites
     HWND hwndFavBox = nullptr;
-    LabelWithCloseWnd* favLabelWithClose = nullptr;
     TreeView* favTreeView = nullptr;
     Vec<FileState*> expandedFavorites;
 
@@ -133,7 +130,6 @@ struct MainWindow {
 
     // state related to annotations sidebar
     HWND hwndAnnotsBox = nullptr;
-    LabelWithCloseWnd* annotsLabelWithClose = nullptr;
     ListBox* annotsListBox = nullptr;
     Splitter* annotsSplitter = nullptr;
     bool annotsVisible = false;

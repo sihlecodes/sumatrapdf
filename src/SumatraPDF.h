@@ -82,7 +82,6 @@ struct MainWindow;
 struct NotificationWnd;
 struct RenderCache;
 struct WindowTab;
-struct LabelWithCloseWnd;
 struct SessionData;
 struct Flags;
 
@@ -123,7 +122,7 @@ void ToggleAnnotationsSidebar(MainWindow* win);
 void PopulateAnnotationsSidebar(MainWindow* win);
 void SelectSidebarPanel(MainWindow* win, int panel);
 void RememberFavTreeExpansionState(MainWindow* win);
-void LayoutTreeContainer(LabelWithCloseWnd* l, HWND hwndTree);
+void LayoutTreeContainer(HWND hwndTree);
 void AdvanceFocus(MainWindow* win);
 void SetCurrentLanguageAndRefreshUI(const char* langCode);
 void UpdateDocumentColors();

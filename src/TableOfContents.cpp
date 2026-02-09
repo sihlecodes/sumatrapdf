@@ -742,7 +742,7 @@ void LoadTocTree(MainWindow* win) {
     if (ShouldCustomDraw(win)) {
         treeView->onCustomDraw = MkFunc1Void(OnTocCustomDraw);
     }
-    LayoutTreeContainer(win->tocLabelWithClose, win->tocTreeView->hwnd);
+    LayoutTreeContainer(win->tocTreeView->hwnd);
     // uint fl = RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN;
     // RedrawWindow(hwnd, nullptr, nullptr, fl);
 }
@@ -893,16 +893,10 @@ static void TocTreeMsgFilter(WndEvent*) {
 
 // Position label with close button and tree window within their parent.
 // Used for toc and favorites.
-void LayoutTreeContainer(LabelWithCloseWnd* l, HWND hwndTree) {
+void LayoutTreeContainer(HWND hwndTree) {
     HWND hwndContainer = GetParent(hwndTree);
-    Size labelSize = l->GetIdealSize();
     Rect rc = WindowRect(hwndContainer);
-    int dy = rc.dy;
-    int y = 0;
-    MoveWindow(l->hwnd, y, 0, rc.dx, labelSize.dy, TRUE);
-    dy -= labelSize.dy;
-    y += labelSize.dy;
-    MoveWindow(hwndTree, 0, y, rc.dx, dy, TRUE);
+    MoveWindow(hwndTree, 0, 0, rc.dx, rc.dy, TRUE);
 }
 
 static LRESULT CALLBACK WndProcTocBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR subclassId, DWORD_PTR data) {
@@ -921,13 +915,10 @@ static LRESULT CALLBACK WndProcTocBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
 
     switch (msg) {
         case WM_SIZE:
-            LayoutTreeContainer(win->tocLabelWithClose, treeView->hwnd);
+            LayoutTreeContainer(treeView->hwnd);
             break;
 
         case WM_COMMAND:
-            if (LOWORD(wp) == IDC_TOC_LABEL_WITH_CLOSE) {
-                ToggleTocBox(win);
-            }
             break;
     }
     return DefSubclassProc(hwnd, msg, wp, lp);
@@ -995,19 +986,6 @@ void CreateToc(MainWindow* win) {
     DWORD style = WS_CHILD | WS_CLIPCHILDREN;
     HWND parent = win->hwndFrame;
     win->hwndTocBox = CreateWindowExW(0, WC_STATIC, L"", style, 0, 0, dx, 0, parent, nullptr, hmod, nullptr);
-
-    auto l = new LabelWithCloseWnd();
-    {
-        LabelWithCloseCreateArgs args;
-        args.parent = win->hwndTocBox;
-        args.cmdId = IDC_TOC_LABEL_WITH_CLOSE;
-        // TODO: use the same font size as in GetTreeFont()?
-        args.font = GetDefaultGuiFont(true, false);
-        l->Create(args);
-    }
-    win->tocLabelWithClose = l;
-    l->SetPaddingXY(2, 2);
-    // label is set in UpdateToolbarSidebarText()
 
     auto treeView = new TreeView();
     TreeView::CreateArgs args;

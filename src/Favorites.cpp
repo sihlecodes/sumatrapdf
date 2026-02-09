@@ -868,14 +868,13 @@ static LRESULT CALLBACK WndProcFavBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     TreeView* treeView = win->favTreeView;
     switch (msg) {
-        case WM_SIZE:
-            LayoutTreeContainer(win->favLabelWithClose, treeView->hwnd);
-            break;
+        case WM_SIZE: {
+            HWND hwndContainer = GetParent(treeView->hwnd);
+            Rect rc = WindowRect(hwndContainer);
+            MoveWindow(treeView->hwnd, 0, 0, rc.dx, rc.dy, TRUE);
+        } break;
 
         case WM_COMMAND:
-            if (LOWORD(wp) == IDC_FAV_LABEL_WITH_CLOSE) {
-                ToggleFavorites(win);
-            }
             break;
     }
     return CallWindowProc(gWndProcFavBox, hwnd, msg, wp, lp);
@@ -889,20 +888,6 @@ void CreateFavorites(MainWindow* win) {
     int dx = gGlobalPrefs->sidebarDx;
     DWORD dwStyle = WS_CHILD | WS_CLIPCHILDREN;
     win->hwndFavBox = CreateWindowW(WC_STATIC, L"", dwStyle, 0, 0, dx, 0, win->hwndFrame, (HMENU) nullptr, h, nullptr);
-
-    auto l = new LabelWithCloseWnd();
-    {
-        LabelWithCloseCreateArgs args;
-        args.parent = win->hwndFavBox;
-        args.cmdId = IDC_FAV_LABEL_WITH_CLOSE;
-        // TODO: use the same font size as in GetTreeFont()?
-        args.font = GetDefaultGuiFont(true, false);
-        l->Create(args);
-    }
-
-    win->favLabelWithClose = l;
-    l->SetPaddingXY(2, 2);
-    // label is set in UpdateToolbarSidebarText()
 
     auto treeView = new TreeView();
     TreeView::CreateArgs args;

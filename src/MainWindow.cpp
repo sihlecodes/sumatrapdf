@@ -172,9 +172,6 @@ MainWindow::~MainWindow() {
     delete sidebarSplitter;
     delete favSplitter;
     delete annotsSplitter;
-    delete tocLabelWithClose;
-    delete favLabelWithClose;
-    delete annotsLabelWithClose;
     delete annotsListBox;
 }
 
@@ -677,7 +674,6 @@ void UpdateControlsColors(MainWindow* win) {
         auto tocTreeView = win->tocTreeView;
         tocTreeView->SetColors(txtCol, bgCol);
 
-        win->tocLabelWithClose->SetColors(txtCol, bgCol);
         win->sidebarSplitter->SetColors(kColorNoChange, splitterCol);
         SetWindowExStyle(tocTreeView->hwnd, WS_EX_STATICEDGE, !flatTreeWnd);
         uint flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED;
@@ -687,7 +683,6 @@ void UpdateControlsColors(MainWindow* win) {
     auto favTreeView = win->favTreeView;
     if (favTreeView) {
         favTreeView->SetColors(txtCol, bgCol);
-        win->favLabelWithClose->SetColors(txtCol, bgCol);
         win->favSplitter->SetColors(kColorNoChange, splitterCol);
 
         SetWindowExStyle(favTreeView->hwnd, WS_EX_STATICEDGE, !flatTreeWnd);
@@ -695,8 +690,7 @@ void UpdateControlsColors(MainWindow* win) {
         SetWindowPos(favTreeView->hwnd, nullptr, 0, 0, 0, 0, flags);
     }
 
-    if (win->annotsLabelWithClose) {
-        win->annotsLabelWithClose->SetColors(txtCol, bgCol);
+    if (win->annotsSplitter) {
         win->annotsSplitter->SetColors(kColorNoChange, splitterCol);
     }
     // TODO: more work needed to to ensure consistent look of the ebook window:
