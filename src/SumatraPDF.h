@@ -114,6 +114,8 @@ void CloseTab(WindowTab* tab, bool quitIfLast);
 bool CanCloseWindow(MainWindow* win);
 void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose);
 void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites);
+void ToggleAnnotationsSidebar(MainWindow* win);
+void PopulateAnnotationsSidebar(MainWindow* win);
 void RememberFavTreeExpansionState(MainWindow* win);
 void LayoutTreeContainer(LabelWithCloseWnd* l, HWND hwndTree);
 void AdvanceFocus(MainWindow* win);

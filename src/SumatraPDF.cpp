@@ -138,9 +138,12 @@ static StrVec gNextPrevDirCache; // cached files in gNextPrevDir
 static void CloseDocumentInCurrentTab(MainWindow*, bool keepUIEnabled, bool deleteModel);
 static void OnSidebarSplitterMove(Splitter::MoveEvent*);
 static void OnFavSplitterMove(Splitter::MoveEvent*);
+static void OnAnnotsSplitterMove(Splitter::MoveEvent*);
+static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sidebarDx = -1);
 
 EBookUI* GetEBookUI() {
-    if (!gGlobalPrefs) return nullptr;
+    if (!gGlobalPrefs)
+        return nullptr;
     return &gGlobalPrefs->eBookUI;
 }
 
@@ -1447,6 +1450,205 @@ void ReloadDocument(MainWindow* win, bool autoRefresh) {
     DeleteFileState(fs);
 }
 
+void PopulateAnnotationsSidebar(MainWindow* win) {
+    if (!win || !win->annotsListBox) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (!tab) {
+        return;
+    }
+    DisplayModel* dm = tab->AsFixed();
+    if (!dm) {
+        return;
+    }
+    EngineBase* engine = dm->GetEngine();
+    if (!engine || !EngineSupportsAnnotations(engine)) {
+        return;
+    }
+
+    Vec<Annotation*> annots;
+    EngineMupdfGetAnnotations(engine, annots);
+
+    auto model = new ListBoxModelStrings();
+    int n = annots.Size();
+    str::Str s;
+    for (int i = 0; i < n; i++) {
+        auto annot = annots.at(i);
+        s.Reset();
+        s.AppendFmt("page %d, ", annot->pageNo);
+        TempStr name = AnnotationReadableNameTemp(annot->type);
+        s.Append(name);
+        model->strings.Append(s.Get());
+    }
+    win->annotsListBox->SetModel(model);
+}
+
+void ToggleAnnotationsSidebar(MainWindow* win) {
+    if (!win) {
+        return;
+    }
+    win->annotsVisible = !win->annotsVisible;
+    if (win->annotsVisible) {
+        // populate annotations list when made visible
+        PopulateAnnotationsSidebar(win);
+        // switch to the annotations tab
+        if (win->hwndSidebarTabControl) {
+            TabCtrl_SetCurSel(win->hwndSidebarTabControl, 2);
+        }
+    }
+    SetSidebarVisibility(win, win->tocVisible, gGlobalPrefs->showFavorites);
+    if (win->annotsVisible && win->annotsListBox) {
+        HwndSetFocus(win->annotsListBox->hwnd);
+    }
+}
+
+// Called when the sidebar tab control selection changes.
+// Shows only the panel corresponding to the selected tab.
+static void OnSidebarTabSelChanged(MainWindow* win) {
+    if (!win || !win->hwndSidebarTabControl) {
+        return;
+    }
+    int idx = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
+
+    // When switching to the annotations tab, ensure it's populated
+    if (idx == 2) {
+        win->annotsVisible = true;
+        PopulateAnnotationsSidebar(win);
+    }
+
+    // When switching to bookmarks, ensure ToC is loaded (if applicable)
+    if (idx == 0 && win->IsDocLoaded() && win->ctrl->HasToc()) {
+        win->tocVisible = true;
+        LoadTocTree(win);
+    }
+
+    // When switching to favorites, enable it
+    if (idx == 1) {
+        gGlobalPrefs->showFavorites = true;
+        PopulateFavTreeIfNeeded(win);
+    }
+
+    // Update visibility of panels based on selected tab
+    HwndSetVisibility(win->hwndTocBox, idx == 0);
+    HwndSetVisibility(win->hwndFavBox, idx == 1);
+    HwndSetVisibility(win->hwndAnnotsBox, idx == 2);
+
+    RelayoutFrame(win, false);
+}
+
+static void AnnotsListBoxSelectionChanged(MainWindow* win) {
+    if (!win || !win->annotsListBox) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (!tab) {
+        return;
+    }
+    int idx = win->annotsListBox->GetCurrentSelection();
+    if (idx < 0) {
+        SetSelectedAnnotation(tab, nullptr, false);
+        return;
+    }
+    DisplayModel* dm = tab->AsFixed();
+    if (!dm) {
+        return;
+    }
+    EngineBase* engine = dm->GetEngine();
+    if (!engine || !EngineSupportsAnnotations(engine)) {
+        return;
+    }
+    Vec<Annotation*> annots;
+    EngineMupdfGetAnnotations(engine, annots);
+    if (idx >= annots.Size()) {
+        return;
+    }
+    Annotation* annot = annots.at(idx);
+    SetSelectedAnnotation(tab, annot, false);
+}
+
+// Position label with close button and listbox within their parent container.
+static void LayoutAnnotsContainer(LabelWithCloseWnd* l, HWND hwndListBox) {
+    HWND hwndContainer = GetParent(hwndListBox);
+    Size labelSize = l->GetIdealSize();
+    Rect rc = WindowRect(hwndContainer);
+    int dy = rc.dy;
+    int y = 0;
+    MoveWindow(l->hwnd, y, 0, rc.dx, labelSize.dy, TRUE);
+    dy -= labelSize.dy;
+    y += labelSize.dy;
+    MoveWindow(hwndListBox, 0, y, rc.dx, dy, TRUE);
+}
+
+static WNDPROC gWndProcAnnotsBox = nullptr;
+static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    MainWindow* win = FindMainWindowByHwnd(hwnd);
+    if (!win) {
+        return CallWindowProc(gWndProcAnnotsBox, hwnd, msg, wp, lp);
+    }
+
+    LRESULT res = TryReflectMessages(hwnd, msg, wp, lp);
+    if (res) {
+        return res;
+    }
+
+    switch (msg) {
+        case WM_SIZE:
+            if (win->annotsListBox) {
+                LayoutAnnotsContainer(win->annotsLabelWithClose, win->annotsListBox->hwnd);
+            }
+            break;
+
+        case WM_COMMAND:
+            if (LOWORD(wp) == IDC_ANNOTS_LABEL_WITH_CLOSE) {
+                ToggleAnnotationsSidebar(win);
+            }
+            break;
+    }
+    return CallWindowProc(gWndProcAnnotsBox, hwnd, msg, wp, lp);
+}
+
+static void CreateAnnotationsSidebar(MainWindow* win) {
+    HMODULE h = GetModuleHandleW(nullptr);
+    int dx = gGlobalPrefs->sidebarDx;
+    DWORD dwStyle = WS_CHILD | WS_CLIPCHILDREN;
+    win->hwndAnnotsBox =
+        CreateWindowW(WC_STATIC, L"", dwStyle, 0, 0, dx, 0, win->hwndFrame, (HMENU) nullptr, h, nullptr);
+
+    auto l = new LabelWithCloseWnd();
+    {
+        LabelWithCloseCreateArgs args;
+        args.parent = win->hwndAnnotsBox;
+        args.cmdId = IDC_ANNOTS_LABEL_WITH_CLOSE;
+        args.font = GetDefaultGuiFont(true, false);
+        l->Create(args);
+    }
+
+    win->annotsLabelWithClose = l;
+    l->SetPaddingXY(2, 2);
+    l->SetLabel(_TRA("Annotations"));
+
+    auto listBox = new ListBox();
+    {
+        ListBox::CreateArgs args;
+        args.parent = win->hwndAnnotsBox;
+        args.idealSizeLines = 5;
+        args.font = GetAppFont();
+        listBox->Create(args);
+    }
+    auto lbModel = new ListBoxModelStrings();
+    listBox->SetModel(lbModel);
+    listBox->onSelectionChanged = MkFunc0(AnnotsListBoxSelectionChanged, win);
+    win->annotsListBox = listBox;
+
+    if (gWndProcAnnotsBox == nullptr) {
+        gWndProcAnnotsBox = (WNDPROC)GetWindowLongPtr(win->hwndAnnotsBox, GWLP_WNDPROC);
+    }
+    SetWindowLongPtr(win->hwndAnnotsBox, GWLP_WNDPROC, (LONG_PTR)WndProcAnnotsBox);
+
+    UpdateControlsColors(win);
+}
+
 static void CreateSidebar(MainWindow* win) {
     {
         Splitter::CreateArgs args;
@@ -1455,6 +1657,26 @@ static void CreateSidebar(MainWindow* win) {
         win->sidebarSplitter = new Splitter();
         win->sidebarSplitter->onMove = MkFunc1Void(OnSidebarSplitterMove);
         win->sidebarSplitter->Create(args);
+    }
+
+    // Create the sidebar tab control for switching between panels
+    {
+        HMODULE h = GetModuleHandleW(nullptr);
+        DWORD style = WS_CHILD | WS_CLIPSIBLINGS | TCS_FIXEDWIDTH | TCS_FORCELABELLEFT;
+        win->hwndSidebarTabControl =
+            CreateWindowW(WC_TABCONTROLW, L"", style, 0, 0, 0, 0, win->hwndFrame, (HMENU) nullptr, h, nullptr);
+        SendMessageW(win->hwndSidebarTabControl, WM_SETFONT, (WPARAM)GetDefaultGuiFont(false, false), TRUE);
+
+        TCITEMW tci = {};
+        tci.mask = TCIF_TEXT;
+        tci.pszText = (WCHAR*)L"Bookmarks";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
+        tci.pszText = (WCHAR*)L"Favorites";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 1, &tci);
+        tci.pszText = (WCHAR*)L"Annotations";
+        TabCtrl_InsertItem(win->hwndSidebarTabControl, 2, &tci);
+
+        TabCtrl_SetCurSel(win->hwndSidebarTabControl, 0);
     }
 
     CreateToc(win);
@@ -1469,6 +1691,17 @@ static void CreateSidebar(MainWindow* win) {
     }
 
     CreateFavorites(win);
+
+    {
+        Splitter::CreateArgs args;
+        args.parent = win->hwndFrame;
+        args.type = SplitterType::Horiz;
+        win->annotsSplitter = new Splitter();
+        win->annotsSplitter->onMove = MkFunc1Void(OnAnnotsSplitterMove);
+        win->annotsSplitter->Create(args);
+    }
+
+    CreateAnnotationsSidebar(win);
 
     if (win->tocVisible) {
         HwndRepaintNow(win->hwndTocBox);
@@ -1486,6 +1719,7 @@ static void UpdateToolbarSidebarText(MainWindow* win) {
 
     win->tocLabelWithClose->SetLabel(_TRA("Bookmarks"));
     win->favLabelWithClose->SetLabel(_TRA("Favorites"));
+    win->annotsLabelWithClose->SetLabel(_TRA("Annotations"));
 }
 
 static MainWindow* CreateMainWindow() {
@@ -3519,7 +3753,7 @@ constexpr int kSplitterDy = 4;
 constexpr int kSidebarMinDx = 150;
 constexpr int kTocMinDy = 100;
 
-static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sidebarDx = -1) {
+static void RelayoutFrame(MainWindow* win, bool updateToolbars, int sidebarDx) {
     Rect rc = ClientRect(win->hwndFrame);
     // don't relayout while the window is minimized
     if (rc.IsEmpty()) {
@@ -3587,10 +3821,12 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sideb
         rc.dy -= rcRebar.dy;
     }
 
-    // ToC and Favorites sidebars at the left
+    // ToC, Favorites, and Annotations sidebars at the left (tabbed)
     bool showFavorites = gGlobalPrefs->showFavorites && !gPluginMode && CanAccessDisk();
     bool tocVisible = win->tocVisible;
-    if (tocVisible || showFavorites) {
+    bool showAnnots = win->annotsVisible;
+    bool showSidebar = tocVisible || showFavorites || showAnnots;
+    if (showSidebar) {
         Size toc = ClientRect(win->hwndTocBox).Size();
         if (sidebarDx > 0) {
             toc = Size(sidebarDx, rc.y);
@@ -3604,37 +3840,37 @@ static void RelayoutFrame(MainWindow* win, bool updateToolbars = true, int sideb
         //       wide (cf. OnFrameGetMinMaxInfo)
         toc.dx = limitValue(toc.dx, kSidebarMinDx, rc.dx / 2);
 
-        toc.dy = 0;
-        if (tocVisible) {
-            if (!showFavorites) {
-                toc.dy = rc.dy;
-            } else {
-                toc.dy = gGlobalPrefs->tocDy;
-                if (toc.dy > 0) {
-                    toc.dy = limitValue(gGlobalPrefs->tocDy, 0, rc.dy);
-                } else {
-                    toc.dy = rc.dy / 2; // default value
-                }
+        // Position the tab control at the top of the sidebar
+        int tabCtrlDy = 0;
+        if (win->hwndSidebarTabControl) {
+            // Get the ideal height of the tab control
+            RECT tabRect = {0, 0, toc.dx, 0};
+            TabCtrl_AdjustRect(win->hwndSidebarTabControl, TRUE, &tabRect);
+            tabCtrlDy = tabRect.bottom - tabRect.top;
+            if (tabCtrlDy < 24) {
+                tabCtrlDy = 24;
             }
+            dh.SetWindowPos(win->hwndSidebarTabControl, nullptr, rc.x, rc.y, toc.dx, tabCtrlDy, SWP_NOZORDER);
         }
 
-        if (tocVisible && showFavorites) {
-            toc.dy = limitValue(toc.dy, kTocMinDy, rc.dy - kTocMinDy);
-        }
+        // The panel area is below the tab control
+        int panelY = rc.y + tabCtrlDy;
+        int panelDy = rc.dy - tabCtrlDy;
 
-        if (tocVisible) {
-            Rect rToc(rc.TL(), toc);
+        // Position the currently selected panel
+        int selTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+
+        if (selTab == 0) {
+            Rect rToc(rc.x, panelY, toc.dx, panelDy);
             dh.MoveWindow(win->hwndTocBox, rToc);
-            if (showFavorites) {
-                Rect rSplitV(rc.x, rc.y + toc.dy, toc.dx, kSplitterDy);
-                dh.MoveWindow(win->favSplitter->hwnd, rSplitV);
-                toc.dy += kSplitterDy;
-            }
-        }
-        if (showFavorites) {
-            Rect rFav(rc.x, rc.y + toc.dy, toc.dx, rc.dy - toc.dy);
+        } else if (selTab == 1) {
+            Rect rFav(rc.x, panelY, toc.dx, panelDy);
             dh.MoveWindow(win->hwndFavBox, rFav);
+        } else if (selTab == 2) {
+            Rect rAnnots(rc.x, panelY, toc.dx, panelDy);
+            dh.MoveWindow(win->hwndAnnotsBox, rAnnots);
         }
+
         Rect rSplitH(rc.x + toc.dx, rc.y, kSplitterDx, rc.dy);
         dh.MoveWindow(win->sidebarSplitter->hwnd, rSplitH);
 
@@ -4153,12 +4389,12 @@ static int wrapIdx(int idx, int max) {
 }
 
 void AdvanceFocus(MainWindow* win) {
-    // Tab order: Frame -> Page -> Find -> ToC -> Favorites -> Frame -> ...
+    // Tab order: Frame -> Page -> Find -> ToC -> Favorites -> Annotations -> Frame -> ...
 
     bool hasToolbar = !win->isFullScreen && !win->presentation && gGlobalPrefs->showToolbar && win->IsDocLoaded();
     int direction = IsShiftPressed() ? -1 : 1;
 
-    const int MAX_WINDOWS = 5;
+    const int MAX_WINDOWS = 6;
     HWND tabOrder[MAX_WINDOWS] = {win->hwndFrame};
     int nWindows = 1;
     if (hasToolbar) {
@@ -4172,6 +4408,9 @@ void AdvanceFocus(MainWindow* win) {
     }
     if (gGlobalPrefs->showFavorites) {
         tabOrder[nWindows++] = win->favTreeView->hwnd;
+    }
+    if (win->annotsVisible && win->annotsListBox) {
+        tabOrder[nWindows++] = win->annotsListBox->hwnd;
     }
     ReportIf(nWindows > MAX_WINDOWS);
 
@@ -4467,6 +4706,7 @@ Annotation* MakeAnnotationsFromSelection(WindowTab* tab, AnnotCreateArgs* args) 
         annot->bounds = GetBounds(annot);
     }
     UpdateAnnotationsList(tab->editAnnotsWindow);
+    PopulateAnnotationsSidebar(win);
 
     // copy selection to clipboard so that user can use Ctrl-V to set contents
     if (args->copyToClipboard) {
@@ -4635,6 +4875,25 @@ static void OnFavSplitterMove(Splitter::MoveEvent* ev) {
     RelayoutFrame(win, false, rToc.dx);
 }
 
+static void OnAnnotsSplitterMove(Splitter::MoveEvent* ev) {
+    Splitter* splitter = ev->w;
+    HWND hwnd = splitter->hwnd;
+    MainWindow* win = FindMainWindowByHwnd(hwnd);
+
+    Point pcur = HwndGetCursorPos(win->hwndCanvas);
+    int annotsY = pcur.y;
+
+    Rect rFrame = ClientRect(win->hwndFrame);
+    Rect rToc = ClientRect(win->hwndTocBox);
+    int minDy = kTocMinDy;
+    int maxDy = rFrame.dy - kTocMinDy;
+    if (annotsY < minDy || annotsY > maxDy) {
+        ev->resizeAllowed = false;
+        return;
+    }
+    RelayoutFrame(win, false, rToc.dx);
+}
+
 void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites) {
     if (gPluginMode || !CanAccessDisk()) {
         showFavorites = false;
@@ -4675,13 +4934,30 @@ void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites) 
         HwndSetFocus(win->hwndFrame);
     }
 
-    HwndSetVisibility(win->sidebarSplitter->hwnd, tocVisible || showFavorites);
-    HwndSetVisibility(win->hwndTocBox, tocVisible);
+    bool showAnnots = win->annotsVisible;
+    bool showSidebar = tocVisible || showFavorites || showAnnots;
+
+    // Determine which tab is selected
+    int selTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+
+    // Show sidebar splitter and tab control when any panel is active
+    HwndSetVisibility(win->sidebarSplitter->hwnd, showSidebar);
     win->sidebarSplitter->isLive = true;
 
-    HwndSetVisibility(win->favSplitter->hwnd, tocVisible && showFavorites);
-    HwndSetVisibility(win->hwndFavBox, showFavorites);
+    if (win->hwndSidebarTabControl) {
+        HwndSetVisibility(win->hwndSidebarTabControl, showSidebar);
+    }
+
+    // Show only the panel corresponding to the selected tab
+    HwndSetVisibility(win->hwndTocBox, showSidebar && selTab == 0);
+    HwndSetVisibility(win->hwndFavBox, showSidebar && selTab == 1);
+    HwndSetVisibility(win->hwndAnnotsBox, showSidebar && selTab == 2);
+
+    // Hide the splitters between panels (no longer stacked)
+    HwndSetVisibility(win->favSplitter->hwnd, false);
     win->favSplitter->isLive = true;
+    HwndSetVisibility(win->annotsSplitter->hwnd, false);
+    win->annotsSplitter->isLive = true;
 
     RelayoutFrame(win, false);
 }
@@ -5969,6 +6245,10 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
         case CmdEditAnnotations: {
             if (tab) {
                 Annotation* annot = GetAnnotionUnderCursor(tab, nullptr);
+                // Show annotations in the sidebar panel
+                if (!win->annotsVisible) {
+                    ToggleAnnotationsSidebar(win);
+                }
                 ShowEditAnnotationsWindow(tab);
                 if (annot) {
                     SetSelectedAnnotation(tab, annot);
@@ -6067,6 +6347,7 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
     }
     if (lastCreatedAnnot) {
         UpdateAnnotationsList(tab->editAnnotsWindow);
+        PopulateAnnotationsSidebar(win);
         ShowEditAnnotationsWindow(tab);
         SetSelectedAnnotation(tab, lastCreatedAnnot);
     }
@@ -6134,6 +6415,15 @@ LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 
         case WM_COMMAND:
             return FrameOnCommand(win, hwnd, msg, wp, lp);
+
+        case WM_NOTIFY: {
+            LPNMHDR nmhdr = (LPNMHDR)lp;
+            if (win && nmhdr->hwndFrom == win->hwndSidebarTabControl && nmhdr->code == TCN_SELCHANGE) {
+                OnSidebarTabSelChanged(win);
+                return 0;
+            }
+            break;
+        }
 
         case WM_MEASUREITEM:
             if (ThemeColorizeControls()) {

@@ -252,6 +252,10 @@ void ToggleTocBox(MainWindow* win) {
         SetSidebarVisibility(win, false, gGlobalPrefs->showFavorites);
         return;
     }
+    // Select the bookmarks tab when showing ToC
+    if (win->hwndSidebarTabControl) {
+        TabCtrl_SetCurSel(win->hwndSidebarTabControl, 0);
+    }
     SetSidebarVisibility(win, true, gGlobalPrefs->showFavorites);
     if (win->tocVisible) {
         HwndSetFocus(win->tocTreeView->hwnd);

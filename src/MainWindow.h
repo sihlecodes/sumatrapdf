@@ -7,6 +7,7 @@ struct StressTest;
 class SumatraUIAutomationProvider;
 struct FrameRateWnd;
 struct LabelWithCloseWnd;
+struct ListBox;
 struct Splitter;
 struct Tooltip;
 struct TreeView;
@@ -129,6 +130,16 @@ struct MainWindow {
 
     // horizontal splitter for resizing favorites and bookmars parts
     Splitter* favSplitter = nullptr;
+
+    // state related to annotations sidebar
+    HWND hwndAnnotsBox = nullptr;
+    LabelWithCloseWnd* annotsLabelWithClose = nullptr;
+    ListBox* annotsListBox = nullptr;
+    Splitter* annotsSplitter = nullptr;
+    bool annotsVisible = false;
+
+    // tab control for switching between sidebar panels
+    HWND hwndSidebarTabControl = nullptr;
 
     TabsCtrl* tabsCtrl = nullptr;
     bool tabsVisible = false;

@@ -1987,6 +1987,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
             AnnotCreateArgs args{annotType, {}};
             annot = EngineMupdfCreateAnnotation(engine, pageNoUnderCursor, ptOnPage, &args);
             UpdateAnnotationsList(tab->editAnnotsWindow);
+            PopulateAnnotationsSidebar(win);
             break;
         }
         case CmdCreateAnnotHighlight: {
