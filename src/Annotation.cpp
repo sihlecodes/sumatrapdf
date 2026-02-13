@@ -1435,9 +1435,7 @@ void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs) {
         }
     }
 
-    // Clear the modifiedAnnotations flag since we just restored from settings
-    // - these aren't "new" changes that need saving
-    epdf->modifiedAnnotations = false;
-
-
+    // Don't clear modifiedAnnotations - these config-only annotations
+    // are genuinely unsaved (not in the PDF) and the user should see
+    // the "unsaved annotations" indicator
 }

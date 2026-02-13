@@ -1385,12 +1385,14 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
     // ReportIf(win->IsDocLoaded() && args->showWin && win->canvasRc.IsEmpty() && !win->AsChm());
 
     // Restore user-created annotations from settings file
+    bool restoredAnnotations = false;
     if (win->AsFixed()) {
         EngineBase* engine = win->AsFixed()->GetEngine();
         const char* filePath = args->FilePath();
         FileState* fileState = gFileHistory.FindByPath(filePath);
-        if (fileState) {
+        if (fileState && fileState->savedAnnotations && fileState->savedAnnotations->Size() > 0) {
             RestoreAnnotationsFromFileState(engine, fileState);
+            restoredAnnotations = true;
         }
     }
 
@@ -1409,6 +1411,11 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
 
     if (!win->IsDocLoaded()) {
         return;
+    }
+
+    // Update toolbar to show "unsaved annotations" indicator if annotations were restored
+    if (restoredAnnotations) {
+        ToolbarUpdateStateForWindow(win, false);
     }
 
     TempStr unsupported = win->ctrl->GetPropertyTemp(kPropUnsupportedFeatures);
