@@ -399,3 +399,28 @@ Fix: Removed the ScrollScreenToRect call and didScrollToSelectedAnnotation usage
 PaintCurrentEditAnnotationMark(). Navigation is handled by GoToPage() in SetSelectedAnnotation.
 
 File changed: src/Canvas.cpp
+────
+Feature: center view on selected annotation
+
+When clicking an annotation in the sidebar, the view now scrolls to center on the selected
+annotation. In continuous mode, the annotation is centered vertically in the viewport. In
+non-continuous mode, the annotation is positioned at ~40% from the top for better visibility.
+
+Implementation: Added GoToAnnotation() helper in EditAnnotations.cpp that:
+1. Navigates to the annotation's page via GoToPage(pageNo, 0, true)
+2. Converts the annotation's center point to screen coordinates via CvtToScreen()
+3. Computes the delta needed to center (continuous) or position (non-continuous) the annotation
+4. Scrolls by that delta via ScrollYBy()
+
+Bug fix (critical): SetQuadPointsAsRect() in Annotation.cpp was not updating annot->bounds after
+changing annotation quad points geometry. For text markup annotations (Highlight, Underline, etc.),
+the creation sequence during RestoreAnnotationsFromFileState was:
+  1. EngineMupdfCreateAnnotation → MakeAnnotationWrapper → pdf_bound_annot caches bounds (but
+     annotation has no quad points yet, so bounds are garbage/uninitialized)
+  2. SetQuadPointsAsRect → sets quad points in mupdf → did NOT update annot->bounds
+  3. GetRect(annot) → returned stale garbage bounds (-2147483648, -2147483648, 4294967296, 4294967296)
+
+Fix: Added pdf_bound_annot() call + annot->bounds update inside SetQuadPointsAsRect after
+pdf_update_annot succeeds, so cached bounds reflect the actual annotation geometry.
+
+Files changed: src/EditAnnotations.cpp, src/Annotation.cpp

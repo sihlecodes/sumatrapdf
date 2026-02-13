@@ -27,6 +27,7 @@ extern "C" {
 #include "Translations.h"
 #include "SumatraConfig.h"
 #include "GlobalPrefs.h"
+#include "DisplayMode.h"
 #include "DisplayModel.h"
 #include "ProgressUpdateUI.h"
 #include "Notifications.h"
@@ -822,6 +823,36 @@ static void OpacityChanging(EditAnnotationsWindow* ew, Trackbar::PositionChangin
     MainWindowRerender(ew->tab->win);
 }
 
+// Navigate to the annotation's page and center/scroll the viewport on it
+static void GoToAnnotation(DisplayModel* dm, Annotation* annot) {
+    int pageNo = annot->pageNo;
+
+    RectF annotRect = GetRect(annot);
+    PointF centerPt = {annotRect.x + annotRect.dx / 2, annotRect.y + annotRect.dy / 2};
+
+    // Navigate to the page first (ensures layout + pageInfo are computed)
+    dm->GoToPage(pageNo, 0, true);
+
+    Rect vp = dm->GetViewPort();
+
+    // Get annotation center in screen coordinates (relative to viewport top-left)
+    Point screenPt = dm->CvtToScreen(pageNo, centerPt);
+
+    bool continuous = IsContinuous(dm->GetDisplayMode());
+    if (continuous) {
+        int dy = screenPt.y - vp.dy / 2;
+        if (dy != 0) {
+            dm->ScrollYBy(dy, false);
+        }
+    } else {
+        int targetScreenY = vp.dy * 2 / 5;
+        int dy = screenPt.y - targetScreenY;
+        if (dy != 0) {
+            dm->ScrollYBy(dy, false);
+        }
+    }
+}
+
 // TODO: maybe use ew->tab->selectedAnnotation instead of annot
 static void UpdateUIForSelectedAnnotation(EditAnnotationsWindow* ew, Annotation* annot, bool setEditFocus) {
     HidePerAnnotControls(ew);
@@ -888,16 +919,7 @@ static void UpdateUIForSelectedAnnotation(EditAnnotationsWindow* ew, Annotation*
         return;
     }
 
-    // don't switch pages if already visible. needed for cases where
-    // we show more than one page at a time and GoToPage() scrolls
-    // to top page
-    // TODO: this is not perfect. We should skipGoToPage if this
-    // is caused by creating an annotation. by definition the page
-    // was visible when user created an annotation.
-    // but that requires passing down more stuff
-    if (!dm->PageVisible(annotPageNo)) {
-        dm->GoToPage(annotPageNo, true);
-    }
+    GoToAnnotation(dm, annot);
 }
 
 static void ButtonSaveAttachment(EditAnnotationsWindow* ew) {
@@ -934,12 +956,11 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     } else if (annot) {
         // Navigate to the annotation even when edit window is not open
         DisplayModel* dm = tab->AsFixed();
-        DisplayModel* winDm = win->AsFixed();
         if (dm) {
             int annotPageNo = annot->pageNo;
             int nPages = dm->PageCount();
-            if (annotPageNo <= nPages && !dm->PageVisible(annotPageNo)) {
-                dm->GoToPage(annotPageNo, true);
+            if (annotPageNo <= nPages) {
+                GoToAnnotation(dm, annot);
             }
         }
     }

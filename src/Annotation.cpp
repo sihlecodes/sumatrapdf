@@ -285,6 +285,9 @@ void SetQuadPointsAsRect(Annotation* annot, const Vec<RectF>& rects) {
             pdf_clear_annot_quad_points(ctx, annot->pdfannot);
             pdf_set_annot_quad_points(ctx, annot->pdfannot, n, quads);
             pdf_update_annot(ctx, annot->pdfannot);
+            // update cached bounds after geometry change
+            fz_rect rc = pdf_bound_annot(ctx, annot->pdfannot);
+            annot->bounds = ToRectF(rc);
         }
         fz_catch(ctx) {
             fz_report_error(ctx);
