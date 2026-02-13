@@ -139,6 +139,9 @@ struct MainWindow {
     // true when a document is loaded and all tabs (Bookmarks, Favorites, Annotations) are shown
     // false on the home/about page where only Favorites tab is shown
     bool sidebarDocMode = false;
+    // remembers the last selected sidebar panel in doc mode so it
+    // survives the doc→home→doc transition during lazy tab loading
+    int lastSidebarPanel = 0;
 
     TabsCtrl* tabsCtrl = nullptr;
     bool tabsVisible = false;

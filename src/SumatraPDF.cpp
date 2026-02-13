@@ -1395,6 +1395,10 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
     }
 
     SetSidebarVisibility(win, showToc, gGlobalPrefs->showFavorites);
+
+    // Refresh annotations sidebar after loading (annotations may have been restored)
+    InvalidateAnnotationsCache(win->CurrentTab());
+    PopulateAnnotationsSidebar(win);
     // restore scroll state after the canvas size has been restored
     if ((args->showWin || ss.page != 1) && win->AsFixed()) {
         win->AsFixed()->SetScrollState(ss);
@@ -1645,6 +1649,11 @@ static void UpdateSidebarForDocState(MainWindow* win) {
     int oldVisualTab = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
     int oldPanel = SidebarTabToPanel(win, oldVisualTab);
 
+    // When leaving doc mode, save the panel so we can restore it
+    if (!docLoaded && win->sidebarDocMode) {
+        win->lastSidebarPanel = oldPanel;
+    }
+
     // Remove all existing tabs
     TabCtrl_DeleteAllItems(win->hwndSidebarTabControl);
 
@@ -1665,10 +1674,14 @@ static void UpdateSidebarForDocState(MainWindow* win) {
         TabCtrl_InsertItem(win->hwndSidebarTabControl, 0, &tci);
     }
 
-    // Try to keep the same panel selected if still available
-    int newTab = PanelToSidebarTab(win, oldPanel);
+    // Restore the saved panel when returning to doc mode
+    int panelToSelect = oldPanel;
+    if (docLoaded) {
+        panelToSelect = win->lastSidebarPanel;
+    }
+    int newTab = PanelToSidebarTab(win, panelToSelect);
     if (newTab < 0) {
-        // Previous panel not available; default to Favorites
+        // Panel not available; default to Favorites
         newTab = PanelToSidebarTab(win, kPanelFavorites);
     }
     if (newTab >= 0) {
@@ -1696,6 +1709,11 @@ static void OnSidebarTabSelChanged(MainWindow* win) {
     }
     int visualIdx = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
     int panel = SidebarTabToPanel(win, visualIdx);
+
+    // Remember the panel so it survives doc mode transitions
+    if (win->sidebarDocMode) {
+        win->lastSidebarPanel = panel;
+    }
 
     // When switching to the annotations tab, ensure it's populated
     if (panel == kPanelAnnotations) {
