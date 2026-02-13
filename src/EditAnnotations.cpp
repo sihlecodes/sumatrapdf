@@ -942,6 +942,13 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     // TODO: maybe if we already have selected annotation, do not auto-pick
     MainWindow* win = tab->win;
     if (annot == tab->selectedAnnotation) {
+        // Re-center on the annotation even if already selected (user may have scrolled away)
+        if (annot) {
+            DisplayModel* dm = tab->AsFixed();
+            if (dm) {
+                GoToAnnotation(dm, annot);
+            }
+        }
         MainWindowRerender(win);
         ToolbarUpdateStateForWindow(win, false);
         return;
