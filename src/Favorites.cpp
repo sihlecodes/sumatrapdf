@@ -579,22 +579,12 @@ static FavTreeItem* MakeFavTopLevelItem(FileState* fs, bool isExpanded) {
         return nullptr;
     }
     auto* res = new FavTreeItem();
-    Favorite* fn = fs->favorites->at(0);
-    res->favorite = fn;
+    res->favorite = nullptr;
 
-    bool isCollapsed = fs->favorites->size() == 1;
-    if (isCollapsed) {
-        isExpanded = false;
-    }
     res->isExpanded = isExpanded;
 
-    TempStr text = nullptr;
-    if (isCollapsed) {
-        text = FavCompactReadableNameTemp(fs, fn);
-    } else {
-        char* fp = fs->filePath;
-        text = path::GetBaseNameTemp(fp);
-    }
+    char* fp = fs->filePath;
+    TempStr text = path::GetBaseNameTemp(fp);
     res->text = str::Dup(text);
     return res;
 }
@@ -628,9 +618,7 @@ static FavTreeModel* BuildFavTreeModel(MainWindow* win) {
             continue;
         }
         res->root->children.Append(ti);
-        if (fs->favorites->size() > 1) {
-            MakeFavSecondLevel(ti, fs);
-        }
+        MakeFavSecondLevel(ti, fs);
     }
     return res;
 }
@@ -841,13 +829,21 @@ static void FavTreeContextMenu(ContextMenuEvent* ev) {
         RememberFavTreeExpansionStateForAllWindows();
         FavTreeItem* fti = (FavTreeItem*)ti;
         Favorite* toDelete = fti->favorite;
-        FileState* f = GetByFavorite(toDelete);
-        char* fp = f->filePath;
+        
         if (fti->parent) {
+            // This is a child node - delete the specific favorite
+            FileState* f = GetByFavorite(toDelete);
+            char* fp = f->filePath;
             RemoveFav(fp, toDelete->pageNo);
         } else {
-            // this is a top-level node which represents all bookmarks for a given file
-            RemoveAllFavForFile(fp);
+            // This is a top-level node - delete all favorites for the file
+            // Get file path from first child's favorite
+            if (fti->children.size() > 0) {
+                Favorite* firstChild = fti->children.at(0)->favorite;
+                FileState* f = GetByFavorite(firstChild);
+                char* fp = f->filePath;
+                RemoveAllFavForFile(fp);
+            }
         }
         UpdateFavoritesTreeForAllWindows();
         SaveSettings();
