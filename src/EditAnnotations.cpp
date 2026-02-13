@@ -27,7 +27,6 @@ extern "C" {
 #include "Translations.h"
 #include "SumatraConfig.h"
 #include "GlobalPrefs.h"
-#include "DisplayMode.h"
 #include "DisplayModel.h"
 #include "ProgressUpdateUI.h"
 #include "Notifications.h"
@@ -838,18 +837,11 @@ static void GoToAnnotation(DisplayModel* dm, Annotation* annot) {
     // Get annotation center in screen coordinates (relative to viewport top-left)
     Point screenPt = dm->CvtToScreen(pageNo, centerPt);
 
-    bool continuous = IsContinuous(dm->GetDisplayMode());
-    if (continuous) {
-        int dy = screenPt.y - vp.dy / 2;
-        if (dy != 0) {
-            dm->ScrollYBy(dy, false);
-        }
-    } else {
-        int targetScreenY = vp.dy * 2 / 5;
-        int dy = screenPt.y - targetScreenY;
-        if (dy != 0) {
-            dm->ScrollYBy(dy, false);
-        }
+    // Scroll to center the annotation vertically in the viewport.
+    // ScrollYBy clamps to page boundaries so we won't scroll past the page.
+    int dy = screenPt.y - vp.dy / 2;
+    if (dy != 0) {
+        dm->ScrollYBy(dy, false);
     }
 }
 
