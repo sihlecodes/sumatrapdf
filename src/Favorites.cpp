@@ -745,6 +745,13 @@ void RememberFavTreeExpansionState(MainWindow* win) {
         // TODO: remember all favorites as expanded
         return;
     }
+
+    // Clear all isFavExpanded flags first
+    FileState* ds;
+    for (size_t i = 0; (ds = gFileHistory.Get(i)) != nullptr; i++) {
+        ds->isFavExpanded = false;
+    }
+
     TreeItem root = tm->Root();
     int n = tm->ChildCount(root);
     for (int i = 0; i < n; i++) {
@@ -752,9 +759,17 @@ void RememberFavTreeExpansionState(MainWindow* win) {
         bool isExpanded = treeView->IsExpanded(ti);
         if (isExpanded) {
             FavTreeItem* fti = (FavTreeItem*)ti;
-            Favorite* fn = fti->favorite;
-            FileState* f = GetByFavorite(fn);
-            win->expandedFavorites.Append(f);
+            FileState* f = nullptr;
+            if (fti->favorite) {
+                f = GetByFavorite(fti->favorite);
+            } else if (fti->children.size() > 0) {
+                // top-level node has no favorite; use first child's favorite
+                f = GetByFavorite(fti->children.at(0)->favorite);
+            }
+            if (f) {
+                win->expandedFavorites.Append(f);
+                f->isFavExpanded = true;
+            }
         }
     }
 }
@@ -762,6 +777,16 @@ void RememberFavTreeExpansionState(MainWindow* win) {
 void RememberFavTreeExpansionStateForAllWindows() {
     for (size_t i = 0; i < gWindows.size(); i++) {
         RememberFavTreeExpansionState(gWindows.at(i));
+    }
+}
+
+void RestoreFavExpansionState(MainWindow* win) {
+    win->expandedFavorites.Reset();
+    FileState* ds;
+    for (size_t i = 0; (ds = gFileHistory.Get(i)) != nullptr; i++) {
+        if (ds->isFavExpanded) {
+            win->expandedFavorites.Append(ds);
+        }
     }
 }
 

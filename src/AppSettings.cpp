@@ -397,6 +397,8 @@ bool SaveSettings() {
             UpdateTabFileDisplayStateForTab(tab);
         }
     }
+    // update favorites expansion state so isFavExpanded flags are persisted
+    RememberFavTreeExpansionStateForAllWindows();
     RememberSessionState();
 
     // remove entries which should (no longer) be remembered

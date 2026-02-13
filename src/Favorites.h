@@ -30,4 +30,6 @@ void PopulateFavTreeIfNeeded(MainWindow* win);
 void GoToFavoriteByMenuId(MainWindow* win, int cmdId);
 void UpdateFavoritesTree(MainWindow* win);
 void UpdateFavoritesTreeForAllWindows();
+void RememberFavTreeExpansionStateForAllWindows();
 bool IsPageInFavorites(const char* filePath, int pageNo);
+void RestoreFavExpansionState(MainWindow* win);

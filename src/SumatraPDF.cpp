@@ -539,6 +539,13 @@ void RememberDefaultWindowPosition(MainWindow* win) {
         gGlobalPrefs->sidebarDx = WindowRect(hwndPanel).dx;
     }
 
+    // Remember which sidebar tab is selected (only in doc mode;
+    // home mode always shows Favorites, which would overwrite the real preference)
+    if (win->sidebarDocMode) {
+        int vTab = win->hwndSidebarTabControl ? TabCtrl_GetCurSel(win->hwndSidebarTabControl) : 0;
+        gGlobalPrefs->sidebarTab = SidebarTabToPanel(win, vTab);
+    }
+
     /* don't update the window's dimensions if it is maximized, mimimized or fullscreened */
     if (WIN_STATE_NORMAL == gGlobalPrefs->windowState && !IsIconic(win->hwndFrame) && !win->presentation) {
         // TODO: Use Get/SetWindowPlacement (otherwise we'd have to separately track
@@ -1689,14 +1696,15 @@ static void UpdateSidebarForDocState(MainWindow* win) {
     if (docLoaded == win->sidebarDocMode) {
         return; // no change needed
     }
-    win->sidebarDocMode = docLoaded;
-
-    // Remember which logical panel was selected
+    // Remember which logical panel was selected before mode change
+    bool wasDocMode = win->sidebarDocMode;
     int oldVisualTab = TabCtrl_GetCurSel(win->hwndSidebarTabControl);
     int oldPanel = SidebarTabToPanel(win, oldVisualTab);
 
+    win->sidebarDocMode = docLoaded;
+
     // When leaving doc mode, save the panel so we can restore it
-    if (!docLoaded && win->sidebarDocMode) {
+    if (!docLoaded && wasDocMode) {
         win->lastSidebarPanel = oldPanel;
     }
 
@@ -1757,8 +1765,10 @@ static void OnSidebarTabSelChanged(MainWindow* win) {
     int panel = SidebarTabToPanel(win, visualIdx);
 
     // Remember the panel so it survives doc mode transitions
+    // Only update in doc mode; home mode always shows Favorites
     if (win->sidebarDocMode) {
         win->lastSidebarPanel = panel;
+        gGlobalPrefs->sidebarTab = panel;
     }
 
     // When switching to the annotations tab, ensure it's populated
@@ -2162,6 +2172,10 @@ MainWindow* CreateAndShowMainWindow(SessionData* data) {
     }
     UpdateWindow(win->hwndFrame);
 
+    // Restore the last selected sidebar tab from preferences
+    win->lastSidebarPanel = gGlobalPrefs->sidebarTab;
+    // Restore favorites expansion state from saved preferences
+    RestoreFavExpansionState(win);
     SetSidebarVisibility(win, false, gGlobalPrefs->showFavorites);
     ToolbarUpdateStateForWindow(win, true);
 

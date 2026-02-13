@@ -242,6 +242,8 @@ var (
 				"in the document"),
 		mkField("SidebarDx", Int, 0,
 			"width of the left sidebar panel containing the table of contents"),
+		mkField("IsFavExpanded", Bool, false,
+			"if true, this file's favorites group is expanded in the sidebar"),
 		mkField("DisplayR2L", Bool, false,
 			"if true, the document is displayed right-to-left in facing and book view modes "+
 				"(only used for comic book documents)"),
@@ -264,7 +266,7 @@ var (
 	}
 
 	// list of fields which aren't serialized when UseDefaultState is set
-	rememberedDisplayState = []string{"DisplayMode", "ScrollPos", "PageNo", "Zoom", "Rotation", "WindowState", "WindowPos", "ShowToc", "SidebarDx", "DisplayR2L", "ReparseIdx", "TocState"}
+	rememberedDisplayState = []string{"DisplayMode", "ScrollPos", "PageNo", "Zoom", "Rotation", "WindowState", "WindowPos", "ShowToc", "SidebarDx", "IsFavExpanded", "DisplayR2L", "ReparseIdx", "TocState"}
 
 	tabState = []*Field{
 		mkField("FilePath", String, nil,
@@ -342,6 +344,8 @@ var (
 			"if true, we show the toolbar at the top of the window"),
 		mkField("ShowFavorites", Bool, false,
 			"if true, we show the Favorites sidebar"),
+		mkField("SidebarTab", Int, 0,
+			"index of the active sidebar tab (0=Bookmarks, 1=Favorites, 2=Annotations)"),
 		mkField("ShowToc", Bool, true,
 			"if true, we show table of contents (Bookmarks) sidebar if it's present "+
 				"in the document"),

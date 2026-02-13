@@ -326,6 +326,8 @@ struct FileState {
     bool showToc;
     // width of the left sidebar panel containing the table of contents
     int sidebarDx;
+    // if true, this file's favorites group is expanded in the sidebar
+    bool isFavExpanded;
     // if true, the document is displayed right-to-left in facing and book
     // view modes (only used for comic book documents)
     bool displayR2L;
@@ -442,6 +444,8 @@ struct GlobalPrefs {
     bool showToolbar;
     // if true, we show the Favorites sidebar
     bool showFavorites;
+    // index of the active sidebar tab (0=Bookmarks, 1=Favorites, 2=Annotations)
+    int sidebarTab;
     // if true, we show table of contents (Bookmarks) sidebar if it's
     // present in the document
     bool showToc;
@@ -765,14 +769,15 @@ static const FieldInfo gFileStateFields[] = {
     {offsetof(FileState, windowPos), SettingType::Compact, (intptr_t)&gRect_1_Info},
     {offsetof(FileState, showToc), SettingType::Bool, true},
     {offsetof(FileState, sidebarDx), SettingType::Int, 0},
+    {offsetof(FileState, isFavExpanded), SettingType::Bool, false},
     {offsetof(FileState, displayR2L), SettingType::Bool, false},
     {offsetof(FileState, reparseIdx), SettingType::Int, 0},
     {offsetof(FileState, tocState), SettingType::IntArray, 0},
 };
 static StructInfo gFileStateInfo = {
-    sizeof(FileState), 20, gFileStateFields,
+    sizeof(FileState), 21, gFileStateFields,
     "FilePath\0Favorites\0SavedAnnotations\0IsPinned\0IsMissing\0OpenCount\0DecryptionKey\0UseDefaultState\0DisplayMode\0ScrollPos\0PageN"
-    "o\0Zoom\0Rotation\0WindowState\0WindowPos\0ShowToc\0SidebarDx\0DisplayR2L\0ReparseIdx\0TocState"};
+    "o\0Zoom\0Rotation\0WindowState\0WindowPos\0ShowToc\0SidebarDx\0IsFavExpanded\0DisplayR2L\0ReparseIdx\0TocState"};
 
 static const FieldInfo gPointF_1_Fields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"0"},
@@ -841,6 +846,7 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {offsetof(GlobalPrefs, showMenubar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showToolbar), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showFavorites), SettingType::Bool, false},
+    {offsetof(GlobalPrefs, sidebarTab), SettingType::Int, 0},
     {offsetof(GlobalPrefs, showToc), SettingType::Bool, true},
     {offsetof(GlobalPrefs, showLinks), SettingType::Bool, false},
     {offsetof(GlobalPrefs, showStartPage), SettingType::Bool, true},
@@ -897,11 +903,11 @@ static const FieldInfo gGlobalPrefsFields[] = {
     {(size_t)-1, SettingType::Comment, (intptr_t)"Settings below are not recognized by the current version"},
 };
 static const StructInfo gGlobalPrefsInfo = {
-    sizeof(GlobalPrefs), 76, gGlobalPrefsFields,
+    sizeof(GlobalPrefs), 77, gGlobalPrefsFields,
     "\0\0CheckForUpdates\0CustomScreenDPI\0DefaultDisplayMode\0DefaultZoom\0EnableTeXEnhancements\0EscToExit\0FullPathI"
     "nTitle\0InverseSearchCmdLine\0LazyLoading\0MainWindowBackground\0NoHomeTab\0HomePageSortByFrequentlyRead\0ReloadMo"
     "difiedDocuments\0RememberOpenedFiles\0RememberStatePerDocument\0RestoreSession\0ReuseInstance\0ShowMenubar\0ShowTo"
-    "olbar\0ShowFavorites\0ShowToc\0ShowLinks\0ShowStartPage\0SidebarDx\0ScrollbarInSinglePage\0SmoothScroll\0FastScrol"
+    "olbar\0ShowFavorites\0SidebarTab\0ShowToc\0ShowLinks\0ShowStartPage\0SidebarDx\0ScrollbarInSinglePage\0SmoothScroll\0FastScrol"
     "lOverScrollbar\0TabWidth\0Theme\0TocDy\0ToolbarSize\0TreeFontName\0TreeFontSize\0UIFontSize\0UseSysColors\0UseTabs"
     "\0ZoomLevels\0ZoomIncrement\0\0FixedPageUI\0\0EBookUI\0\0ComicBookUI\0\0ChmUI\0\0Annotations\0\0ExternalViewers\0"
     "\0ForwardSearch\0\0PrinterDefaults\0\0SelectionHandlers\0\0Shortcuts\0\0Themes\0\0\0DefaultPasswords\0UiLanguage\0"
