@@ -6530,6 +6530,16 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             ToggleFavorites(win);
             break;
 
+        case CmdToggleSidebar: {
+            bool sidebarVisible = win->tocVisible || gGlobalPrefs->showFavorites || win->annotsVisible;
+            if (sidebarVisible) {
+                win->annotsVisible = false;
+                SetSidebarVisibility(win, false, false);
+            } else {
+                SetSidebarVisibility(win, true, gGlobalPrefs->showFavorites);
+            }
+        } break;
+
         case CmdTogglePageInfo: {
             // "page info" tip: make figuring out current page and
             // total pages count a one-key action (unless they're already visible)
