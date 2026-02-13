@@ -159,6 +159,30 @@ var (
 		mkField("DefaultAuthor", String, "", "default author for created annotations, use (none) to not add an author at all. If not set will use Windows user name").setVersion("3.4"),
 	}
 
+	annotRect = []*Field{
+		mkField("X", Float, 0, "x coordinate"),
+		mkField("Y", Float, 0, "y coordinate"),
+		mkField("Dx", Float, 0, "width"),
+		mkField("Dy", Float, 0, "height"),
+	}
+
+	savedAnnotation = []*Field{
+		mkField("Type", String, "", "annotation type name (e.g. Highlight, Text, FreeText)"),
+		mkField("PageNo", Int, 0, "page number"),
+		mkField("Color", Color, "", "annotation color"),
+		mkCompactStruct("Rect", annotRect, "bounding rectangle in page coordinates").setStructName("RectF"),
+		mkField("Contents", String, nil, "text contents of the annotation"),
+		mkField("InteriorColor", Color, "", "interior color for shapes"),
+		mkField("BorderWidth", Int, 0, "border width"),
+		mkField("IconName", String, nil, "icon name for text/stamp annotations"),
+		mkField("Opacity", Int, 255, "opacity 0-255"),
+		mkField("Quadding", Int, 0, "text alignment (0=left, 1=center, 2=right)"),
+		mkField("QuadPoints", String, nil, "serialized quad points for text markup annotations"),
+		mkField("FontSize", Int, 0, "font size for FreeText annotations"),
+		mkField("FontName", String, nil, "font name for FreeText annotations"),
+		mkField("TextColor", Color, "", "text color for FreeText annotations"),
+	}
+
 	favorite = []*Field{
 		mkField("Name", String, nil,
 			"name of this favorite as shown in the menu"),
@@ -175,6 +199,8 @@ var (
 			"path of the document"),
 		mkArray("Favorites", favorite,
 			"Values which are persisted for bookmarks/favorites"),
+		mkArray("SavedAnnotations", savedAnnotation,
+			"annotations saved to settings file so the user doesn't have to save the document"),
 		mkField("IsPinned", Bool, false,
 			"a document can be \"pinned\" to the Frequently Read list so that it "+
 				"isn't displaced by recently opened documents"),

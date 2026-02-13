@@ -934,6 +934,7 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     } else if (annot) {
         // Navigate to the annotation even when edit window is not open
         DisplayModel* dm = tab->AsFixed();
+        DisplayModel* winDm = win->AsFixed();
         if (dm) {
             int annotPageNo = annot->pageNo;
             int nPages = dm->PageCount();

@@ -305,3 +305,97 @@ what is the condition that led to this crash?
    check protects against a stale/null entry in the tab control's user data. If this crash reoccurs, the root cause
   investigation would need to focus on finding which code path deletes a WindowTab without properly removing it from
   tabsCtrl, or what causes tab->filePath to point to freed memory.
+────
+Rework annotations to save to configuration file (SumatraPDF-settings.txt) so users don't need to save the ebook/PDF to preserve annotations.
+
+Previously, annotations created by the user only lived in the mupdf document in memory. If the user closed without saving to PDF, annotations were lost. Now, annotations marked as user-created (isSmx) are automatically persisted to the settings file alongside other per-file state (favorites, display settings, etc.).
+
+Changes:
+
+1. do/settings_gen_def.go:
+   - Added annotRect field array (X, Y, Dx, Dy floats) for serializing RectF
+   - Added savedAnnotation field array (14 fields: Type, PageNo, Color, Rect, Contents, InteriorColor, BorderWidth, IconName, Opacity, Quadding, QuadPoints, FontSize, FontName, TextColor)
+   - Added mkArray("SavedAnnotations", savedAnnotation, ...) to fileSettings after Favorites
+
+2. src/Settings.h:
+   - Added SavedAnnotation struct with 14 fields matching the Go definition
+   - Added Vec<SavedAnnotation*>* savedAnnotations to FileState struct
+   - Added gRectFFields/gRectFInfo metadata for RectF compact serialization
+   - Added gSavedAnnotationFields/gSavedAnnotationInfo metadata (14 fields)
+   - Updated gFileStateFields to include savedAnnotations Array entry
+   - Updated gFileStateInfo field count from 19 to 20
+
+3. src/Annotation.h:
+   - Added bool isSmx = false to Annotation struct (marks user-created annotations for settings persistence)
+   - Added forward declarations for EngineBase and FileState
+   - Added function declarations: SaveAnnotationsToFileState, RestoreAnnotationsFromFileState, AnnotationTypeFromName, AnnotationTypeNameTemp
+
+4. src/Annotation.cpp:
+   - Set isSmx = true in EngineMupdfCreateAnnotation() when user creates annotation
+   - Added gAnnotNames lookup table mapping AnnotationType enum to string names
+   - Added AnnotationTypeFromName() and AnnotationTypeNameTemp() for type<->string conversion
+   - Added SerializeQuadPointsTemp() to serialize mupdf quad points to "x,y,dx,dy;..." string
+   - Added ParseQuadPoints() to parse serialized quad points back to Vec<RectF>
+   - Added PdfColorToHexTemp() to convert PdfColor to "#rrggbb" hex string
+   - Added SaveAnnotationsToFileState(): iterates all annotations, saves isSmx ones to FileState->savedAnnotations with all properties (type, pageNo, color, rect, contents, interiorColor, borderWidth, iconName, opacity, quadding, quadPoints for text markup, fontSize/fontName/textColor for FreeText)
+   - Added RestoreAnnotationsFromFileState(): recreates annotations from FileState using EngineMupdfCreateAnnotation, applies all saved properties, clears modifiedAnnotations flag
+
+5. src/GlobalPrefs.h / src/GlobalPrefs.cpp:
+   - Added NewSavedAnnotation() using DeserializeStruct(&gSavedAnnotationInfo, nullptr)
+   - Added DeleteSavedAnnotation() using FreeStruct(&gSavedAnnotationInfo, sa)
+
+6. src/SumatraPDF.cpp:
+   - UpdateTabFileDisplayStateForTab(): Added save hook - calls SaveAnnotationsToFileState(engine, fs) when updating tab state
+   - ReplaceDocumentInCurrentTab(): Added restore hook - calls RestoreAnnotationsFromFileState(engine, fileState) after engine setup
+   - MaybeSaveAnnotations(): Completely reworked - now auto-saves smx annotations to settings file instead of showing save dialog, always returns true (no user prompt blocking close)
+   - SaveAnnotationsToExistingFile(): Added clearing of FileState savedAnnotations after successful PDF save
+   - SaveAnnotationsToMaybeNewPdfFile(): Added clearing of FileState savedAnnotations after successful PDF save
+
+Lifecycle:
+- When a tab is closed or settings are saved, SaveAnnotationsToFileState() persists all isSmx annotations
+- When a document is opened, RestoreAnnotationsFromFileState() recreates annotations from saved state
+- When user explicitly saves annotations to PDF, the settings-based copies are cleared (no duplication)
+- MaybeSaveAnnotations() no longer prompts the user; annotations are silently saved to settings
+────
+Fix: annotations lost on non-visible pages after reopen
+
+Bug: SaveAnnotationsToFileState() used EngineMupdfGetAnnotations() which calls GetFzPageInfoFast().
+GetFzPageInfoFast() returns nullptr for pages that aren't "fully loaded" (fullyLoaded == false).
+When RestoreAnnotationsFromFileState() recreates annotations, it calls EngineMupdfCreateAnnotation()
+which calls GetFzPageInfo(pageNo, true) — a quick load that sets pageInfo->page but does NOT set
+fullyLoaded = true. So the annotation is correctly added to pageInfo->annotations, but the page
+remains "not fully loaded." On the next save cycle, EngineMupdfGetAnnotations skips that page,
+and the annotation is lost.
+
+Over multiple open/close cycles, only annotations on pages that happen to be fully rendered
+(currently visible pages, typically page 1) survive — all others are progressively lost.
+
+Fix: Changed SaveAnnotationsToFileState() to iterate epdf->pages directly under pagesAccess lock,
+instead of using EngineMupdfGetAnnotations(). This accesses annotations from ALL pages regardless
+of their fullyLoaded state, preserving annotations on quick-loaded pages.
+
+File changed: src/Annotation.cpp
+────
+Fix: annotation navigation jumps to page 1 instead of correct page
+
+Bug: When clicking a restored annotation in the sidebar, the document briefly navigated to the
+correct page, then immediately reset to page 1.
+
+Root cause: PaintCurrentEditAnnotationMark() in Canvas.cpp called dm->ScrollScreenToRect(pageNo, rect)
+during the WM_PAINT handler. The call chain was:
+  SetSelectedAnnotation → MainWindowRerender → RedrawAll(true) → UpdateWindow → sync WM_PAINT →
+  DrawDocument → PaintCurrentEditAnnotationMark → ScrollScreenToRect → ScrollYBy(dy=2147483034)
+
+ScrollScreenToRect computed a screen coordinate delta (sy) that overflowed to ~2 billion due to
+incorrect screen coordinate computation during painting. ScrollYBy added this to the current viewPort.y,
+causing integer overflow, which limitValue() then clamped to 0 (page 1).
+
+The ScrollScreenToRect call was guarded by tab->didScrollToSelectedAnnotation, which SetSelectedAnnotation
+set to false before triggering the rerender. GoToPage() in SetSelectedAnnotation already correctly
+navigates to the annotation's page, so the ScrollScreenToRect call in the paint handler was redundant
+and harmful — modifying viewport state during painting is inherently dangerous.
+
+Fix: Removed the ScrollScreenToRect call and didScrollToSelectedAnnotation usage from
+PaintCurrentEditAnnotationMark(). Navigation is handled by GoToPage() in SetSelectedAnnotation.
+
+File changed: src/Canvas.cpp

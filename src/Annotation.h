@@ -44,7 +44,9 @@ enum class AnnotationChange {
 };
 
 class EngineMupdf;
+class EngineBase;
 extern "C" struct pdf_annot;
+struct FileState;
 
 extern const char* gAnnotationTextIcons;
 
@@ -61,6 +63,10 @@ struct Annotation {
 
     EngineMupdf* engine = nullptr;
     pdf_annot* pdfannot = nullptr; // not owned
+
+    // true if this annotation was created by the user (not loaded from PDF)
+    // and should be saved to the settings file
+    bool isSmx = false;
 
     Annotation() = default;
     ~Annotation();
@@ -113,3 +119,9 @@ void SetIconName(Annotation*, const char*);
 bool SetColor(Annotation*, PdfColor);
 void DeleteAnnotation(Annotation*);
 bool IsMoveableAnnotation(AnnotationType);
+
+struct FileState;
+void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs);
+void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs);
+AnnotationType AnnotationTypeFromName(const char* name);
+TempStr AnnotationTypeNameTemp(AnnotationType tp);

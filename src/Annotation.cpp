@@ -1097,6 +1097,7 @@ Annotation* EngineMupdfCreateAnnotation(EngineBase* engine, int pageNo, PointF p
     }
 
     auto res = MakeAnnotationWrapper(epdf, annot, pageNo);
+    res->isSmx = true;
     MarkNotificationAsModified(epdf, res, AnnotationChange::Add);
 
     if (typ == AnnotationType::Text) {
@@ -1111,4 +1112,329 @@ Annotation* EngineMupdfCreateAnnotation(EngineBase* engine, int pageNo, PointF p
 
     pdf_drop_annot(ctx, annot);
     return res;
+}
+
+// must match the order of enum class AnnotationType
+// clang-format off
+static const char* gAnnotNames =
+    "Text\0"
+    "Link\0"
+    "FreeText\0"
+    "Line\0"
+    "Square\0"
+    "Circle\0"
+    "Polygon\0"
+    "PolyLine\0"
+    "Highlight\0"
+    "Underline\0"
+    "Squiggly\0"
+    "StrikeOut\0"
+    "Redact\0"
+    "Stamp\0"
+    "Caret\0"
+    "Ink\0"
+    "Popup\0"
+    "FileAttachment\0"
+    "Sound\0"
+    "Movie\0"
+    "RichMedia\0"
+    "Widget\0"
+    "Screen\0"
+    "PrinterMark\0"
+    "TrapNet\0"
+    "Watermark\0"
+    "3D\0"
+    "Projection\0";
+// clang-format on
+
+AnnotationType AnnotationTypeFromName(const char* name) {
+    if (!name || !*name) {
+        return AnnotationType::Unknown;
+    }
+    int idx = seqstrings::StrToIdxIS(gAnnotNames, name);
+    if (idx < 0) {
+        return AnnotationType::Unknown;
+    }
+    return (AnnotationType)idx;
+}
+
+TempStr AnnotationTypeNameTemp(AnnotationType tp) {
+    int n = (int)tp;
+    if (n < 0) {
+        return (char*)"Unknown";
+    }
+    const char* s = seqstrings::IdxToStr(gAnnotNames, n);
+    if (!s) {
+        return (char*)"Unknown";
+    }
+    return (TempStr)s;
+}
+
+// Serialize quad points from a mupdf annotation to a string
+// Format: "x,y,dx,dy;x,y,dx,dy;..."
+static TempStr SerializeQuadPointsTemp(EngineMupdf* e, Annotation* annot) {
+    auto ctx = e->Ctx();
+    ScopedCritSec cs(e->ctxAccess);
+    int n = 0;
+    fz_try(ctx) {
+        n = pdf_annot_quad_point_count(ctx, annot->pdfannot);
+    }
+    fz_catch(ctx) {
+        fz_report_error(ctx);
+        return nullptr;
+    }
+    if (n == 0) {
+        return nullptr;
+    }
+    str::Str s;
+    for (int i = 0; i < n; i++) {
+        fz_quad q{};
+        fz_rect r{};
+        fz_try(ctx) {
+            q = pdf_annot_quad_point(ctx, annot->pdfannot, i);
+            r = fz_rect_from_quad(q);
+        }
+        fz_catch(ctx) {
+            fz_report_error(ctx);
+            continue;
+        }
+        if (i > 0) {
+            s.AppendChar(';');
+        }
+        s.AppendFmt("%g,%g,%g,%g", r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    }
+    return str::DupTemp(s.Get());
+}
+
+// Parse quad points string back into Vec<RectF>
+static void ParseQuadPoints(const char* s, Vec<RectF>& rects) {
+    if (!s || !*s) {
+        return;
+    }
+    StrVec parts;
+    Split(&parts, s, ";");
+    for (int i = 0; i < parts.Size(); i++) {
+        const char* part = parts.At(i);
+        float x = 0, y = 0, dx = 0, dy = 0;
+        int nParsed = sscanf(part, "%g,%g,%g,%g", &x, &y, &dx, &dy);
+        if (nParsed == 4) {
+            rects.Append(RectF(x, y, dx, dy));
+        }
+    }
+}
+
+// Convert PdfColor to a hex color string like "#rrggbbaa"
+static TempStr PdfColorToHexTemp(PdfColor c) {
+    if (c == 0) {
+        return (TempStr) "";
+    }
+    u8 r, g, b, a;
+    UnpackPdfColor(c, r, g, b, a);
+    if (a == 0xff) {
+        return str::FormatTemp("#%02x%02x%02x", r, g, b);
+    }
+    return str::FormatTemp("#%02x%02x%02x%02x", a, r, g, b);
+}
+
+void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs) {
+    if (!engine || !fs) {
+        return;
+    }
+    EngineMupdf* epdf = AsEngineMupdf(engine);
+    if (!epdf) {
+        return;
+    }
+
+    // Clear existing saved annotations
+    if (fs->savedAnnotations) {
+        for (auto sa : *fs->savedAnnotations) {
+            DeleteSavedAnnotation(sa);
+        }
+        fs->savedAnnotations->Reset();
+    }
+
+    // Iterate all pages directly instead of using EngineMupdfGetAnnotations
+    // because that function uses GetFzPageInfoFast which skips pages that
+    // aren't fully loaded. Restored annotations live on quick-loaded pages
+    // and would be lost if we only checked fully-loaded pages.
+    Vec<Annotation*> annots;
+    {
+        ScopedCritSec scope(&epdf->pagesAccess);
+        for (int i = 0; i < epdf->pageCount; i++) {
+            FzPageInfo* pi = epdf->pages[i];
+            if (pi) {
+                annots.Append(pi->annotations);
+            }
+        }
+    }
+
+    for (Annotation* annot : annots) {
+        if (!annot->isSmx) {
+            continue;
+        }
+        SavedAnnotation* sa = NewSavedAnnotation();
+        AnnotationType tp = Type(annot);
+        str::ReplaceWithCopy(&sa->type, AnnotationTypeNameTemp(tp));
+        sa->pageNo = PageNo(annot);
+        logf("SaveAnnotationsToFileState: saving annot type='%s' pageNo=%d rect=(%g,%g,%g,%g)\n",
+             sa->type, sa->pageNo, (double)GetBounds(annot).x, (double)GetBounds(annot).y,
+             (double)GetBounds(annot).dx, (double)GetBounds(annot).dy);
+
+        PdfColor col = GetColor(annot);
+        str::ReplaceWithCopy(&sa->color, PdfColorToHexTemp(col));
+
+        RectF bounds = GetBounds(annot);
+        sa->rect = bounds;
+
+        TempStr contents = Contents(annot);
+        if (contents && *contents) {
+            str::ReplaceWithCopy(&sa->contents, contents);
+        }
+
+        PdfColor ic = InteriorColor(annot);
+        str::ReplaceWithCopy(&sa->interiorColor, PdfColorToHexTemp(ic));
+
+        sa->borderWidth = BorderWidth(annot);
+
+        const char* iconName = IconName(annot);
+        if (iconName && *iconName) {
+            str::ReplaceWithCopy(&sa->iconName, iconName);
+        }
+
+        sa->opacity = Opacity(annot);
+        sa->quadding = Quadding(annot);
+
+        // Serialize quad points for text markup annotations
+        if (tp == AnnotationType::Highlight || tp == AnnotationType::Underline ||
+            tp == AnnotationType::Squiggly || tp == AnnotationType::StrikeOut) {
+            TempStr qp = SerializeQuadPointsTemp(epdf, annot);
+            if (qp) {
+                str::ReplaceWithCopy(&sa->quadPoints, qp);
+            }
+        }
+
+        // Save FreeText-specific properties
+        if (tp == AnnotationType::FreeText) {
+            sa->fontSize = DefaultAppearanceTextSize(annot);
+            const char* fontName = DefaultAppearanceTextFont(annot);
+            if (fontName && *fontName) {
+                str::ReplaceWithCopy(&sa->fontName, fontName);
+            }
+            PdfColor tc = DefaultAppearanceTextColor(annot);
+            str::ReplaceWithCopy(&sa->textColor, PdfColorToHexTemp(tc));
+        }
+
+        fs->savedAnnotations->Append(sa);
+    }
+}
+
+void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs) {
+    if (!engine || !fs) {
+        return;
+    }
+    EngineMupdf* epdf = AsEngineMupdf(engine);
+    if (!epdf || !epdf->pdfdoc) {
+        return;
+    }
+    if (!fs->savedAnnotations || fs->savedAnnotations->Size() == 0) {
+        return;
+    }
+
+    for (SavedAnnotation* sa : *fs->savedAnnotations) {
+        AnnotationType tp = AnnotationTypeFromName(sa->type);
+        if (tp == AnnotationType::Unknown) {
+            continue;
+        }
+        int pageNo = sa->pageNo;
+        if (pageNo < 1 || pageNo > engine->PageCount()) {
+            continue;
+        }
+
+        PointF pos{sa->rect.x, sa->rect.y};
+        AnnotCreateArgs args;
+        args.annotType = tp;
+
+        // Parse color
+        if (sa->color && *sa->color) {
+            ParseColor(args.col, sa->color);
+        }
+
+        Annotation* annot = EngineMupdfCreateAnnotation(engine, pageNo, pos, &args);
+        if (!annot) {
+            continue;
+        }
+        annot->isSmx = true;
+        // Set the bounding rect
+        if (sa->rect.dx > 0 && sa->rect.dy > 0) {
+            if (IsMoveableAnnotation(tp)) {
+                SetRect(annot, sa->rect);
+            }
+        }
+
+        // Set contents
+        if (sa->contents && *sa->contents) {
+            SetContents(annot, sa->contents);
+        }
+
+        // Restore quad points for text markup annotations
+        if (sa->quadPoints && *sa->quadPoints) {
+            Vec<RectF> rects;
+            ParseQuadPoints(sa->quadPoints, rects);
+            if (rects.Size() > 0) {
+                SetQuadPointsAsRect(annot, rects);
+            }
+        }
+
+        // Set interior color
+        if (sa->interiorColor && *sa->interiorColor) {
+            ParsedColor ic;
+            ParseColor(ic, sa->interiorColor);
+            if (ic.parsedOk) {
+                SetInteriorColor(annot, ic.pdfCol);
+            }
+        }
+
+        // Set border width
+        if (sa->borderWidth > 0) {
+            SetBorderWidth(annot, sa->borderWidth);
+        }
+
+        // Set icon name
+        if (sa->iconName && *sa->iconName) {
+            SetIconName(annot, sa->iconName);
+        }
+
+        // Set opacity
+        if (sa->opacity < 255) {
+            SetOpacity(annot, sa->opacity);
+        }
+
+        // Set quadding
+        if (sa->quadding > 0) {
+            SetQuadding(annot, sa->quadding);
+        }
+
+        // Restore FreeText-specific properties
+        if (tp == AnnotationType::FreeText) {
+            if (sa->fontSize > 0) {
+                SetDefaultAppearanceTextSize(annot, sa->fontSize);
+            }
+            if (sa->fontName && *sa->fontName) {
+                SetDefaultAppearanceTextFont(annot, sa->fontName);
+            }
+            if (sa->textColor && *sa->textColor) {
+                ParsedColor tc;
+                ParseColor(tc, sa->textColor);
+                if (tc.parsedOk) {
+                    SetDefaultAppearanceTextColor(annot, tc.pdfCol);
+                }
+            }
+        }
+    }
+
+    // Clear the modifiedAnnotations flag since we just restored from settings
+    // - these aren't "new" changes that need saving
+    epdf->modifiedAnnotations = false;
+
+
 }

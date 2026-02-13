@@ -240,12 +240,51 @@ struct Favorite {
     int menuId;
 };
 
+// annotations saved to settings file so the user doesn't have to save
+// the document
+struct SavedAnnotation {
+    // annotation type name (e.g. Highlight, Text, FreeText)
+    char* type;
+    // page number
+    int pageNo;
+    // annotation color
+    char* color;
+    ParsedColor colorParsed;
+    // bounding rectangle in page coordinates
+    RectF rect;
+    // text contents of the annotation
+    char* contents;
+    // interior color for shapes
+    char* interiorColor;
+    ParsedColor interiorColorParsed;
+    // border width
+    int borderWidth;
+    // icon name for text/stamp annotations
+    char* iconName;
+    // opacity 0-255
+    int opacity;
+    // text alignment (0=left, 1=center, 2=right)
+    int quadding;
+    // serialized quad points for text markup annotations
+    char* quadPoints;
+    // font size for FreeText annotations
+    int fontSize;
+    // font name for FreeText annotations
+    char* fontName;
+    // text color for FreeText annotations
+    char* textColor;
+    ParsedColor textColorParsed;
+};
+
 // information about opened files (in most recently used order)
 struct FileState {
     // path of the document
     char* filePath;
     // Values which are persisted for bookmarks/favorites
     Vec<Favorite*>* favorites;
+    // annotations saved to settings file so the user doesn't have to save
+    // the document
+    Vec<SavedAnnotation*>* savedAnnotations;
     // a document can be "pinned" to the Frequently Read list so that it
     // isn't displaced by recently opened documents
     bool isPinned;
@@ -665,6 +704,35 @@ static const FieldInfo gFavoriteFields[] = {
 };
 static const StructInfo gFavoriteInfo = {sizeof(Favorite), 3, gFavoriteFields, "Name\0PageNo\0PageLabel"};
 
+static const FieldInfo gRectFFields[] = {
+    {offsetof(RectF, x), SettingType::Float, (intptr_t)"0"},
+    {offsetof(RectF, y), SettingType::Float, (intptr_t)"0"},
+    {offsetof(RectF, dx), SettingType::Float, (intptr_t)"0"},
+    {offsetof(RectF, dy), SettingType::Float, (intptr_t)"0"},
+};
+static const StructInfo gRectFInfo = {sizeof(RectF), 4, gRectFFields, "X\0Y\0Dx\0Dy"};
+
+static const FieldInfo gSavedAnnotationFields[] = {
+    {offsetof(SavedAnnotation, type), SettingType::String, (intptr_t)""},
+    {offsetof(SavedAnnotation, pageNo), SettingType::Int, 0},
+    {offsetof(SavedAnnotation, color), SettingType::Color, (intptr_t)""},
+    {offsetof(SavedAnnotation, rect), SettingType::Compact, (intptr_t)&gRectFInfo},
+    {offsetof(SavedAnnotation, contents), SettingType::String, 0},
+    {offsetof(SavedAnnotation, interiorColor), SettingType::Color, (intptr_t)""},
+    {offsetof(SavedAnnotation, borderWidth), SettingType::Int, 0},
+    {offsetof(SavedAnnotation, iconName), SettingType::String, 0},
+    {offsetof(SavedAnnotation, opacity), SettingType::Int, 255},
+    {offsetof(SavedAnnotation, quadding), SettingType::Int, 0},
+    {offsetof(SavedAnnotation, quadPoints), SettingType::String, 0},
+    {offsetof(SavedAnnotation, fontSize), SettingType::Int, 0},
+    {offsetof(SavedAnnotation, fontName), SettingType::String, 0},
+    {offsetof(SavedAnnotation, textColor), SettingType::Color, (intptr_t)""},
+};
+static const StructInfo gSavedAnnotationInfo = {
+    sizeof(SavedAnnotation), 14, gSavedAnnotationFields,
+    "Type\0PageNo\0Color\0Rect\0Contents\0InteriorColor\0BorderWidth\0IconName\0Opacity\0Quadding\0QuadPoints\0FontSiz"
+    "e\0FontName\0TextColor"};
+
 static const FieldInfo gPointFFields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"0"},
     {offsetof(PointF, y), SettingType::Float, (intptr_t)"0"},
@@ -682,6 +750,7 @@ static const StructInfo gRect_1_Info = {sizeof(Rect), 4, gRect_1_Fields, "X\0Y\0
 static const FieldInfo gFileStateFields[] = {
     {offsetof(FileState, filePath), SettingType::String, 0},
     {offsetof(FileState, favorites), SettingType::Array, (intptr_t)&gFavoriteInfo},
+    {offsetof(FileState, savedAnnotations), SettingType::Array, (intptr_t)&gSavedAnnotationInfo},
     {offsetof(FileState, isPinned), SettingType::Bool, false},
     {offsetof(FileState, isMissing), SettingType::Bool, false},
     {offsetof(FileState, openCount), SettingType::Int, 0},
@@ -701,8 +770,8 @@ static const FieldInfo gFileStateFields[] = {
     {offsetof(FileState, tocState), SettingType::IntArray, 0},
 };
 static StructInfo gFileStateInfo = {
-    sizeof(FileState), 19, gFileStateFields,
-    "FilePath\0Favorites\0IsPinned\0IsMissing\0OpenCount\0DecryptionKey\0UseDefaultState\0DisplayMode\0ScrollPos\0PageN"
+    sizeof(FileState), 20, gFileStateFields,
+    "FilePath\0Favorites\0SavedAnnotations\0IsPinned\0IsMissing\0OpenCount\0DecryptionKey\0UseDefaultState\0DisplayMode\0ScrollPos\0PageN"
     "o\0Zoom\0Rotation\0WindowState\0WindowPos\0ShowToc\0SidebarDx\0DisplayR2L\0ReparseIdx\0TocState"};
 
 static const FieldInfo gPointF_1_Fields[] = {

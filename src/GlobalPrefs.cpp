@@ -46,6 +46,14 @@ void DeleteFavorite(Favorite* fav) {
     FreeStruct(&gFavoriteInfo, fav);
 }
 
+SavedAnnotation* NewSavedAnnotation() {
+    return (SavedAnnotation*)DeserializeStruct(&gSavedAnnotationInfo, nullptr);
+}
+
+void DeleteSavedAnnotation(SavedAnnotation* sa) {
+    FreeStruct(&gSavedAnnotationInfo, sa);
+}
+
 GlobalPrefs* NewGlobalPrefs(const char* data) {
     return (GlobalPrefs*)DeserializeStruct(&gGlobalPrefsInfo, data);
 }

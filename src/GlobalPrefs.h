@@ -10,6 +10,9 @@ void DeleteFileStates(Vec<FileState*>*);
 Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel);
 void DeleteFavorite(Favorite* fav);
 
+SavedAnnotation* NewSavedAnnotation();
+void DeleteSavedAnnotation(SavedAnnotation* sa);
+
 GlobalPrefs* NewGlobalPrefs(const char*);
 ByteSlice SerializeGlobalPrefs(GlobalPrefs* prefs, const char* prevData);
 void DeleteGlobalPrefs(GlobalPrefs*);

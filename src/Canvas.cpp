@@ -1204,10 +1204,6 @@ NO_INLINE static void PaintCurrentEditAnnotationMark(WindowTab* tab, HDC hdc, Di
     }
 
     Rect rect = dm->CvtToScreen(pageNo, GetRect(annot));
-    if (!tab->didScrollToSelectedAnnotation) {
-        dm->ScrollScreenToRect(pageNo, rect);
-        tab->didScrollToSelectedAnnotation = true;
-    }
     rect.Inflate(4, 4);
     // Gdiplus::Color col = GdiRgbFromCOLORREF(gCurrentTheme->window.backgroundColor);
     Gdiplus::Color col = GdiRgbFromCOLORREF(0xff3333); // blue

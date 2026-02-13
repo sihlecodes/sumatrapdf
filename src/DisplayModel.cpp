@@ -1156,7 +1156,6 @@ void DisplayModel::SetViewPortSize(Size newViewPortSize) {
     if (isDocReady) {
         ss = GetScrollState();
     }
-
     totalViewPortSize = newViewPortSize;
     Relayout(zoomVirtual, rotation);
 

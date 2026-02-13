@@ -583,6 +583,12 @@ void UpdateTabFileDisplayStateForTab(WindowTab* tab) {
     tab->ctrl->GetDisplayState(fs);
     UpdateDisplayStateWindowRect(win, fs, false);
     UpdateSidebarDisplayState(tab, fs);
+    // Save user-created annotations to settings file
+    DisplayModel* dm = tab->AsFixed();
+    if (dm) {
+        EngineBase* engine = dm->GetEngine();
+        SaveAnnotationsToFileState(engine, fs);
+    }
 }
 
 static bool gForceRtl = false;
@@ -1377,6 +1383,16 @@ static void ReplaceDocumentInCurrentTab(LoadArgs* args, DocController* ctrl, Fil
     // has not been determined yet
     // cf. https://code.google.com/p/sumatrapdf/issues/detail?id=2541
     // ReportIf(win->IsDocLoaded() && args->showWin && win->canvasRc.IsEmpty() && !win->AsChm());
+
+    // Restore user-created annotations from settings file
+    if (win->AsFixed()) {
+        EngineBase* engine = win->AsFixed()->GetEngine();
+        const char* filePath = args->FilePath();
+        FileState* fileState = gFileHistory.FindByPath(filePath);
+        if (fileState) {
+            RestoreAnnotationsFromFileState(engine, fileState);
+        }
+    }
 
     SetSidebarVisibility(win, showToc, gGlobalPrefs->showFavorites);
     // restore scroll state after the canvas size has been restored
@@ -2828,6 +2844,15 @@ bool SaveAnnotationsToExistingFile(WindowTab* tab) {
     }
     ShowSavedAnnotationsNotification(tab->win->hwndCanvas, path);
 
+    // Annotations are now saved into the PDF file, so clear them from settings
+    FileState* fs = gFileHistory.FindByName(path, nullptr);
+    if (fs && fs->savedAnnotations) {
+        for (auto sa : *fs->savedAnnotations) {
+            DeleteSavedAnnotation(sa);
+        }
+        fs->savedAnnotations->Reset();
+    }
+
     // have to re-open edit annotations window because the current has
     // a reference to deleted Engine
     bool hadEditAnnotations = CloseAndDeleteEditAnnotationsWindow(tab);
@@ -2897,6 +2922,15 @@ bool SaveAnnotationsToMaybeNewPdfFile(WindowTab* tab) {
     ok = EngineMupdfSaveUpdated(engine, dstFilePath, fn);
     if (!ok) {
         return false;
+    }
+
+    // Clear saved annotations from settings since they're now in the PDF
+    FileState* srcFs = gFileHistory.FindByName(srcFileName, nullptr);
+    if (srcFs && srcFs->savedAnnotations) {
+        for (auto sa : *srcFs->savedAnnotations) {
+            DeleteSavedAnnotation(sa);
+        }
+        srcFs->savedAnnotations->Reset();
     }
 
     // have to re-open edit annotations window because the current has
@@ -3026,28 +3060,16 @@ static bool MaybeSaveAnnotations(WindowTab* tab) {
     if (!shouldConfirm) {
         return true;
     }
-    tab->askedToSaveAnnotations = true;
-    auto path = dm->GetFilePath();
-    auto choice = ShouldSaveAnnotationsDialog(tab->win->hwndFrame, path);
-    switch (choice) {
-        case SaveChoice::Discard:
-            return true;
-        case SaveChoice::SaveNew: {
-            bool didSave = SaveAnnotationsToMaybeNewPdfFile(tab);
-            return didSave;
-        }
-        case SaveChoice::SaveExisting: {
-            // const char* path = engine->FileName();
-            ShowErrorData data{tab, path};
-            auto fn = MkFunc1(ShowSaveAnnotationError, &data);
-            bool ok = EngineMupdfSaveUpdated(engine, nullptr, fn);
-        } break;
-        case SaveChoice::Cancel:
-            tab->askedToSaveAnnotations = false;
-            return false;
-        default:
-            ReportIf(true);
+
+    // Auto-save user-created (smx) annotations to the settings file
+    // so the user doesn't lose them without having to explicitly save to PDF
+    const char* fp = tab->filePath;
+    FileState* fs = gFileHistory.FindByName(fp, nullptr);
+    if (fs) {
+        SaveAnnotationsToFileState(engine, fs);
     }
+
+    // Don't prompt the user - annotations are auto-saved to settings
     return true;
 }
 
