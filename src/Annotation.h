@@ -68,6 +68,13 @@ struct Annotation {
     // and should be saved to the settings file
     bool isSmx = false;
 
+    // true if a PDF-embedded annotation was modified by the user
+    bool isModified = false;
+
+    // original bounds when first loaded from PDF, used to match annotations
+    // across sessions for modified/deleted tracking
+    RectF originalBounds = {};
+
     Annotation() = default;
     ~Annotation();
 };
@@ -124,5 +131,6 @@ bool IsMoveableAnnotation(AnnotationType);
 struct FileState;
 void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs);
 void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs);
+void RecordAnnotationDeletion(EngineBase* engine, FileState* fs, Annotation* annot);
 AnnotationType AnnotationTypeFromName(const char* name);
 TempStr AnnotationTypeNameTemp(AnnotationType tp);

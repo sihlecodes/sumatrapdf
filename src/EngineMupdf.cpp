@@ -3907,6 +3907,9 @@ NO_INLINE void ValidateAnnotationsInSync(EngineMupdf* e, FzPageInfo* pageInfo) {
 // to easily trace all places that modify annotations
 NO_INLINE void MarkNotificationAsModified(EngineMupdf* e, Annotation* annot, AnnotationChange change) {
     e->modifiedAnnotations = true;
+    if (!annot->isSmx && change == AnnotationChange::Modify) {
+        annot->isModified = true;
+    }
     if (!e->pdfdoc) {
         return;
     }
@@ -3977,6 +3980,7 @@ Annotation* MakeAnnotationWrapper(EngineMupdf* engine, pdf_annot* annot, int pag
     res->pageNo = pageNo;
     res->pdfannot = annot;
     res->bounds = ToRectF(bounds);
+    res->originalBounds = res->bounds;
     res->type = typ;
     return res;
 }

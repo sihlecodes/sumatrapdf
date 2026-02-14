@@ -1243,6 +1243,75 @@ static TempStr PdfColorToHexTemp(PdfColor c) {
     return str::FormatTemp("#%02x%02x%02x%02x", a, r, g, b);
 }
 
+static void SaveAnnotationToSavedAnnotation(SavedAnnotation* sa, Annotation* annot, EngineMupdf* epdf) {
+    AnnotationType tp = Type(annot);
+    str::ReplaceWithCopy(&sa->type, AnnotationTypeNameTemp(tp));
+    sa->pageNo = PageNo(annot);
+
+    PdfColor col = GetColor(annot);
+    str::ReplaceWithCopy(&sa->color, PdfColorToHexTemp(col));
+
+    RectF bounds = GetBounds(annot);
+    sa->rect = bounds;
+
+    TempStr contents = Contents(annot);
+    if (contents && *contents) {
+        str::ReplaceWithCopy(&sa->contents, contents);
+    }
+
+    PdfColor ic = InteriorColor(annot);
+    str::ReplaceWithCopy(&sa->interiorColor, PdfColorToHexTemp(ic));
+
+    sa->borderWidth = BorderWidth(annot);
+
+    const char* iconName = IconName(annot);
+    if (iconName && *iconName) {
+        str::ReplaceWithCopy(&sa->iconName, iconName);
+    }
+
+    sa->opacity = Opacity(annot);
+    sa->quadding = Quadding(annot);
+
+    // Serialize quad points for text markup annotations
+    if (tp == AnnotationType::Highlight || tp == AnnotationType::Underline ||
+        tp == AnnotationType::Squiggly || tp == AnnotationType::StrikeOut) {
+        TempStr qp = SerializeQuadPointsTemp(epdf, annot);
+        if (qp) {
+            str::ReplaceWithCopy(&sa->quadPoints, qp);
+        }
+    }
+
+    // Save FreeText-specific properties
+    if (tp == AnnotationType::FreeText) {
+        sa->fontSize = DefaultAppearanceTextSize(annot);
+        const char* fontName = DefaultAppearanceTextFont(annot);
+        if (fontName && *fontName) {
+            str::ReplaceWithCopy(&sa->fontName, fontName);
+        }
+        PdfColor tc = DefaultAppearanceTextColor(annot);
+        str::ReplaceWithCopy(&sa->textColor, PdfColorToHexTemp(tc));
+    }
+}
+
+void RecordAnnotationDeletion(EngineBase* engine, FileState* fs, Annotation* annot) {
+    if (!engine || !fs || !annot) {
+        return;
+    }
+    // Only record deletions of PDF-embedded annotations (not user-created ones)
+    if (annot->isSmx) {
+        return;
+    }
+    if (!fs->savedAnnotations) {
+        return;
+    }
+    SavedAnnotation* sa = NewSavedAnnotation();
+    EngineMupdf* epdf = AsEngineMupdf(engine);
+    SaveAnnotationToSavedAnnotation(sa, annot, epdf);
+    sa->isDeleted = true;
+    sa->originalRect = annot->originalBounds;
+    fs->savedAnnotations->Append(sa);
+}
+
 void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs) {
     if (!engine || !fs) {
         return;
@@ -1252,12 +1321,26 @@ void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs) {
         return;
     }
 
-    // Clear existing saved annotations
+    // Collect existing deleted entries to preserve them
+    Vec<SavedAnnotation*> deletedEntries;
     if (fs->savedAnnotations) {
+        for (int i = fs->savedAnnotations->Size() - 1; i >= 0; i--) {
+            SavedAnnotation* sa = fs->savedAnnotations->at(i);
+            if (sa->isDeleted) {
+                deletedEntries.Append(sa);
+                fs->savedAnnotations->RemoveAtFast(i);
+            }
+        }
+        // Clear remaining (non-deleted) entries
         for (auto sa : *fs->savedAnnotations) {
             DeleteSavedAnnotation(sa);
         }
         fs->savedAnnotations->Reset();
+    }
+
+    // Re-add preserved deleted entries
+    for (auto sa : deletedEntries) {
+        fs->savedAnnotations->Append(sa);
     }
 
     // Iterate all pages directly instead of using EngineMupdfGetAnnotations
@@ -1276,63 +1359,119 @@ void SaveAnnotationsToFileState(EngineBase* engine, FileState* fs) {
     }
 
     for (Annotation* annot : annots) {
-        if (!annot->isSmx) {
+        if (!annot->isSmx && !annot->isModified) {
             continue;
         }
         SavedAnnotation* sa = NewSavedAnnotation();
-        AnnotationType tp = Type(annot);
-        str::ReplaceWithCopy(&sa->type, AnnotationTypeNameTemp(tp));
-        sa->pageNo = PageNo(annot);
-        logf("SaveAnnotationsToFileState: saving annot type='%s' pageNo=%d rect=(%g,%g,%g,%g)\n",
-             sa->type, sa->pageNo, (double)GetBounds(annot).x, (double)GetBounds(annot).y,
+        SaveAnnotationToSavedAnnotation(sa, annot, epdf);
+
+        if (annot->isModified && !annot->isSmx) {
+            sa->isModified = true;
+            sa->originalRect = annot->originalBounds;
+        }
+
+        logf("SaveAnnotationsToFileState: saving annot type='%s' pageNo=%d isModified=%d rect=(%g,%g,%g,%g)\n",
+             sa->type, sa->pageNo, (int)sa->isModified,
+             (double)GetBounds(annot).x, (double)GetBounds(annot).y,
              (double)GetBounds(annot).dx, (double)GetBounds(annot).dy);
-
-        PdfColor col = GetColor(annot);
-        str::ReplaceWithCopy(&sa->color, PdfColorToHexTemp(col));
-
-        RectF bounds = GetBounds(annot);
-        sa->rect = bounds;
-
-        TempStr contents = Contents(annot);
-        if (contents && *contents) {
-            str::ReplaceWithCopy(&sa->contents, contents);
-        }
-
-        PdfColor ic = InteriorColor(annot);
-        str::ReplaceWithCopy(&sa->interiorColor, PdfColorToHexTemp(ic));
-
-        sa->borderWidth = BorderWidth(annot);
-
-        const char* iconName = IconName(annot);
-        if (iconName && *iconName) {
-            str::ReplaceWithCopy(&sa->iconName, iconName);
-        }
-
-        sa->opacity = Opacity(annot);
-        sa->quadding = Quadding(annot);
-
-        // Serialize quad points for text markup annotations
-        if (tp == AnnotationType::Highlight || tp == AnnotationType::Underline ||
-            tp == AnnotationType::Squiggly || tp == AnnotationType::StrikeOut) {
-            TempStr qp = SerializeQuadPointsTemp(epdf, annot);
-            if (qp) {
-                str::ReplaceWithCopy(&sa->quadPoints, qp);
-            }
-        }
-
-        // Save FreeText-specific properties
-        if (tp == AnnotationType::FreeText) {
-            sa->fontSize = DefaultAppearanceTextSize(annot);
-            const char* fontName = DefaultAppearanceTextFont(annot);
-            if (fontName && *fontName) {
-                str::ReplaceWithCopy(&sa->fontName, fontName);
-            }
-            PdfColor tc = DefaultAppearanceTextColor(annot);
-            str::ReplaceWithCopy(&sa->textColor, PdfColorToHexTemp(tc));
-        }
 
         fs->savedAnnotations->Append(sa);
     }
+}
+
+// Find a PDF annotation on the given page matching type and approximate bounds
+static Annotation* FindMatchingPdfAnnotation(EngineMupdf* epdf, int pageNo, AnnotationType tp, RectF rect) {
+    if (pageNo < 1 || pageNo > epdf->pageCount) {
+        return nullptr;
+    }
+    // Force-load the page so that annotations are populated
+    FzPageInfo* pi = epdf->GetFzPageInfo(pageNo, true);
+    if (!pi) {
+        return nullptr;
+    }
+    // Match by type and bounds with a small tolerance
+    float tolerance = 0.5f;
+    for (Annotation* annot : pi->annotations) {
+        if (annot->isSmx) {
+            continue;
+        }
+        if (Type(annot) != tp) {
+            continue;
+        }
+        RectF b = annot->bounds;
+        if (std::abs(b.x - rect.x) < tolerance && std::abs(b.y - rect.y) < tolerance &&
+            std::abs(b.dx - rect.dx) < tolerance && std::abs(b.dy - rect.dy) < tolerance) {
+            return annot;
+        }
+    }
+    return nullptr;
+}
+
+static void ApplySavedAnnotationProperties(Annotation* annot, SavedAnnotation* sa) {
+    AnnotationType tp = Type(annot);
+
+    // Apply color
+    if (sa->color && *sa->color) {
+        ParsedColor pc;
+        ParseColor(pc, sa->color);
+        if (pc.parsedOk) {
+            SetColor(annot, pc.pdfCol);
+        }
+    }
+
+    // Apply contents
+    if (sa->contents && *sa->contents) {
+        SetContents(annot, sa->contents);
+    }
+
+    // Apply interior color
+    if (sa->interiorColor && *sa->interiorColor) {
+        ParsedColor ic;
+        ParseColor(ic, sa->interiorColor);
+        if (ic.parsedOk) {
+            SetInteriorColor(annot, ic.pdfCol);
+        }
+    }
+
+    // Apply border width
+    if (sa->borderWidth > 0) {
+        SetBorderWidth(annot, sa->borderWidth);
+    }
+
+    // Apply icon name
+    if (sa->iconName && *sa->iconName) {
+        SetIconName(annot, sa->iconName);
+    }
+
+    // Apply opacity
+    if (sa->opacity < 255) {
+        SetOpacity(annot, sa->opacity);
+    }
+
+    // Apply quadding
+    if (sa->quadding > 0) {
+        SetQuadding(annot, sa->quadding);
+    }
+
+    // Apply FreeText properties
+    if (tp == AnnotationType::FreeText) {
+        if (sa->fontSize > 0) {
+            SetDefaultAppearanceTextSize(annot, sa->fontSize);
+        }
+        if (sa->fontName && *sa->fontName) {
+            SetDefaultAppearanceTextFont(annot, sa->fontName);
+        }
+        if (sa->textColor && *sa->textColor) {
+            ParsedColor tc;
+            ParseColor(tc, sa->textColor);
+            if (tc.parsedOk) {
+                SetDefaultAppearanceTextColor(annot, tc.pdfCol);
+            }
+        }
+    }
+
+    // Mark as modified so it gets re-saved
+    annot->isModified = true;
 }
 
 void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs) {
@@ -1357,6 +1496,25 @@ void RestoreAnnotationsFromFileState(EngineBase* engine, FileState* fs) {
             continue;
         }
 
+        if (sa->isDeleted) {
+            // Find and delete the matching PDF annotation
+            Annotation* annot = FindMatchingPdfAnnotation(epdf, pageNo, tp, sa->originalRect);
+            if (annot) {
+                DeleteAnnotation(annot);
+            }
+            continue;
+        }
+
+        if (sa->isModified) {
+            // Find the matching PDF annotation and apply modifications
+            Annotation* annot = FindMatchingPdfAnnotation(epdf, pageNo, tp, sa->originalRect);
+            if (annot) {
+                ApplySavedAnnotationProperties(annot, sa);
+            }
+            continue;
+        }
+
+        // New (isSmx) annotation - create it
         PointF pos{sa->rect.x, sa->rect.y};
         AnnotCreateArgs args;
         args.annotType = tp;

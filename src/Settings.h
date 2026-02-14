@@ -274,6 +274,12 @@ struct SavedAnnotation {
     // text color for FreeText annotations
     char* textColor;
     ParsedColor textColorParsed;
+    // if true, this annotation was deleted from the PDF
+    bool isDeleted;
+    // if true, this is a modification of an existing PDF annotation
+    bool isModified;
+    // original bounding rectangle to match against PDF annotation
+    RectF originalRect;
 };
 
 // information about opened files (in most recently used order)
@@ -731,11 +737,14 @@ static const FieldInfo gSavedAnnotationFields[] = {
     {offsetof(SavedAnnotation, fontSize), SettingType::Int, 0},
     {offsetof(SavedAnnotation, fontName), SettingType::String, 0},
     {offsetof(SavedAnnotation, textColor), SettingType::Color, (intptr_t)""},
+    {offsetof(SavedAnnotation, isDeleted), SettingType::Bool, false},
+    {offsetof(SavedAnnotation, isModified), SettingType::Bool, false},
+    {offsetof(SavedAnnotation, originalRect), SettingType::Compact, (intptr_t)&gRectFInfo},
 };
 static const StructInfo gSavedAnnotationInfo = {
-    sizeof(SavedAnnotation), 14, gSavedAnnotationFields,
+    sizeof(SavedAnnotation), 17, gSavedAnnotationFields,
     "Type\0PageNo\0Color\0Rect\0Contents\0InteriorColor\0BorderWidth\0IconName\0Opacity\0Quadding\0QuadPoints\0FontSiz"
-    "e\0FontName\0TextColor"};
+    "e\0FontName\0TextColor\0IsDeleted\0IsModified\0OriginalRect"};
 
 static const FieldInfo gPointFFields[] = {
     {offsetof(PointF, x), SettingType::Float, (intptr_t)"0"},

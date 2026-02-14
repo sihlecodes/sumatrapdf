@@ -38,6 +38,7 @@ extern "C" {
 #include "Canvas.h"
 #include "Commands.h"
 #include "DarkModeSubclass.h"
+#include "FileHistory.h"
 
 #include "utils/Log.h"
 
@@ -195,6 +196,19 @@ void DeleteAnnotationAndUpdateUI(WindowTab* tab, Annotation* annot) {
     if (annot != tab->selectedAnnotation) {
         // preserve current selection if we're not deleting it
         selectNext = tab->selectedAnnotation;
+    }
+
+    // Record deletion of PDF-embedded annotations so it persists across sessions
+    if (!annot->isSmx) {
+        DisplayModel* dm = tab->AsFixed();
+        if (dm) {
+            EngineBase* engine = dm->GetEngine();
+            const char* fp = tab->filePath;
+            FileState* fs = gFileHistory.FindByName(fp, nullptr);
+            if (fs) {
+                RecordAnnotationDeletion(engine, fs, annot);
+            }
+        }
     }
 
     DeleteAnnotation(annot);

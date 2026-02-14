@@ -181,6 +181,9 @@ var (
 		mkField("FontSize", Int, 0, "font size for FreeText annotations"),
 		mkField("FontName", String, nil, "font name for FreeText annotations"),
 		mkField("TextColor", Color, "", "text color for FreeText annotations"),
+		mkField("IsDeleted", Bool, false, "if true, this annotation was deleted from the PDF"),
+		mkField("IsModified", Bool, false, "if true, this is a modification of an existing PDF annotation"),
+		mkCompactStruct("OriginalRect", annotRect, "original bounding rectangle to match against PDF annotation").setStructName("RectF"),
 	}
 
 	favorite = []*Field{
