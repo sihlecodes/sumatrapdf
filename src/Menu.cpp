@@ -1944,7 +1944,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
 
         case CmdEditAnnotations:
             ShowEditAnnotationsWindow(tab);
-            SetSelectedAnnotation(tab, ctx->annotationUnderCursor);
+            SetSelectedAnnotation(tab, ctx->annotationUnderCursor, true, false);
             break;
         case CmdDeleteAnnotation: {
             DeleteAnnotationAndUpdateUI(tab, ctx->annotationUnderCursor);

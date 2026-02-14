@@ -906,7 +906,7 @@ static void ButtonEmbedAttachment(EditAnnotationsWindow* ew) {
     MessageBoxNYI(ew->hwnd);
 }
 
-void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus) {
+void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus, bool goToAnnotation) {
     // when we delete an annotation we automatically pick one to
     // set as selected and it might end up as currently selected
     // we still want to redraw to not show deleted annotation
@@ -915,7 +915,7 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     MainWindow* win = tab->win;
     if (annot == tab->selectedAnnotation) {
         // Re-center on the annotation even if already selected (user may have scrolled away)
-        if (annot) {
+        if (goToAnnotation && annot) {
             DisplayModel* dm = tab->AsFixed();
             if (dm) {
                 GoToAnnotation(dm, annot);
@@ -930,6 +930,9 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     auto ew = tab->editAnnotsWindow;
     // go to page with a given annotations before triggering repaint
     if (ew) {
+        if (!goToAnnotation) {
+            ew->skipGoToPage = true;
+        }
         UpdateUIForSelectedAnnotation(ew, annot, setEditFocus);
         HwndMakeVisible(ew->hwnd);
     }
@@ -947,7 +950,7 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
             win->annotsListBox->SetCurrentSelection(-1);
         }
     }
-    if (!ew && annot) {
+    if (goToAnnotation && !ew && annot) {
         // Navigate to the annotation even when edit window is not open
         DisplayModel* dm = tab->AsFixed();
         if (dm) {
