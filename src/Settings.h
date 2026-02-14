@@ -238,6 +238,9 @@ struct Favorite {
     char* pageLabel;
     // id of this favorite in the menu (assigned by AppendFavMenuItems)
     int menuId;
+    // scroll position on the page (in user space units, -1 means not set)
+    float scrollX;
+    float scrollY;
 };
 
 // annotations saved to settings file so the user doesn't have to save
@@ -711,8 +714,10 @@ static const FieldInfo gFavoriteFields[] = {
     {offsetof(Favorite, name), SettingType::String, 0},
     {offsetof(Favorite, pageNo), SettingType::Int, 0},
     {offsetof(Favorite, pageLabel), SettingType::String, 0},
+    {offsetof(Favorite, scrollX), SettingType::Float, (intptr_t)"-1"},
+    {offsetof(Favorite, scrollY), SettingType::Float, (intptr_t)"-1"},
 };
-static const StructInfo gFavoriteInfo = {sizeof(Favorite), 3, gFavoriteFields, "Name\0PageNo\0PageLabel"};
+static const StructInfo gFavoriteInfo = {sizeof(Favorite), 5, gFavoriteFields, "Name\0PageNo\0PageLabel\0ScrollX\0ScrollY"};
 
 static const FieldInfo gRectFFields[] = {
     {offsetof(RectF, x), SettingType::Float, (intptr_t)"0"},

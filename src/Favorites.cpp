@@ -18,6 +18,7 @@
 #include "DocController.h"
 #include "EngineBase.h"
 #include "EngineAll.h"
+#include "DisplayModel.h"
 #include "SumatraConfig.h"
 #include "FileHistory.h"
 #include "GlobalPrefs.h"
@@ -216,7 +217,8 @@ static int SortByPageNo(const void* a, const void* b) {
     return na->pageNo - nb->pageNo;
 }
 
-static void AddOrReplaceFav(const char* filePath, int pageNo, const char* name, const char* pageLabel) {
+static void AddOrReplaceFav(const char* filePath, int pageNo, const char* name, const char* pageLabel,
+                            float scrollX, float scrollY) {
     FileState* fav = GetFavByFilePath(filePath);
     if (!fav) {
         // we were asked to add a favorite for current file but couldn't find
@@ -229,8 +231,10 @@ static void AddOrReplaceFav(const char* filePath, int pageNo, const char* name, 
     if (fn) {
         str::ReplaceWithCopy(&fn->name, name);
         ReportIf(fn->pageLabel && !str::Eq(fn->pageLabel, pageLabel));
+        fn->scrollX = scrollX;
+        fn->scrollY = scrollY;
     } else {
-        fn = NewFavorite(pageNo, name, pageLabel);
+        fn = NewFavorite(pageNo, name, pageLabel, scrollX, scrollY);
         fav->favorites->Append(fn);
         fav->favorites->Sort(SortByPageNo);
     }
@@ -468,12 +472,18 @@ void ToggleFavorites(MainWindow* win) {
     }
 }
 
-static void GoToFavoritePage(MainWindow* win, int pageNo) {
+static void GoToFavoritePage(MainWindow* win, int pageNo, float scrollX, float scrollY) {
     if (!IsMainWindowValid(win)) {
         return;
     }
     if (win->IsDocLoaded() && win->ctrl->ValidPageNo(pageNo)) {
-        win->ctrl->GoToPage(pageNo, true);
+        DisplayModel* dm = win->AsFixed();
+        if (dm && (scrollX >= 0 || scrollY >= 0)) {
+            ScrollState ss(pageNo, (double)scrollX, (double)scrollY);
+            dm->SetScrollState(ss);
+        } else {
+            win->ctrl->GoToPage(pageNo, true);
+        }
     }
     // we might have been invoked by clicking on a tree view
     // switch focus so that keyboard navigation works, which enables
@@ -484,10 +494,12 @@ static void GoToFavoritePage(MainWindow* win, int pageNo) {
 struct GoToFavoritePageData {
     MainWindow* win;
     int pageNo;
+    float scrollX;
+    float scrollY;
 };
 
 static void GoToFavoritePage(GoToFavoritePageData* d) {
-    GoToFavoritePage(d->win, d->pageNo);
+    GoToFavoritePage(d->win, d->pageNo, d->scrollX, d->scrollY);
     delete d;
 }
 
@@ -505,6 +517,8 @@ static void GoToFavorite(MainWindow* win, FileState* fs, Favorite* fav) {
     if (existingWin) {
         auto data = new GoToFavoritePageData;
         data->pageNo = fav->pageNo;
+        data->scrollX = fav->scrollX;
+        data->scrollY = fav->scrollY;
         data->win = existingWin;
         auto fn = MkFunc0<GoToFavoritePageData>(GoToFavoritePage, data);
         uitask::Post(fn, "TaskGoToFavorite");
@@ -532,6 +546,8 @@ static void GoToFavorite(MainWindow* win, FileState* fs, Favorite* fav) {
     if (win) {
         auto data = new GoToFavoritePageData;
         data->pageNo = pageNo;
+        data->scrollX = fav->scrollX;
+        data->scrollY = fav->scrollY;
         data->win = win;
         auto fn = MkFunc0<GoToFavoritePageData>(GoToFavoritePage, data);
         uitask::Post(fn, "TaskGoToFavorite2");
@@ -692,7 +708,14 @@ void AddFavoriteWithLabelAndName(MainWindow* win, int pageNo, const char* pageLa
     }
     WindowTab* tab = win->CurrentTab();
     const char* path = tab->filePath;
-    AddOrReplaceFav(path, pageNo, name, pl);
+    float scrollX = -1, scrollY = -1;
+    DisplayModel* dm = tab->AsFixed();
+    if (dm) {
+        ScrollState ss = dm->GetScrollState();
+        scrollX = (float)ss.x;
+        scrollY = (float)ss.y;
+    }
+    AddOrReplaceFav(path, pageNo, name, pl, scrollX, scrollY);
     // expand newly added favorites by default
     FileState* fav = GetFavByFilePath(path);
     if (fav && fav->favorites->size() == 2) {

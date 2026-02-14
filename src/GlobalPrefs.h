@@ -7,7 +7,7 @@ FileState* NewFileState(const char*);
 void DeleteFileState(FileState*);
 void DeleteFileStates(Vec<FileState*>*);
 
-Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel);
+Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel, float scrollX = -1, float scrollY = -1);
 void DeleteFavorite(Favorite* fav);
 
 SavedAnnotation* NewSavedAnnotation();

@@ -34,11 +34,13 @@ void DeleteFileStates(Vec<FileState*>* a) {
     delete a;
 }
 
-Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel) {
+Favorite* NewFavorite(int pageNo, const char* name, const char* pageLabel, float scrollX, float scrollY) {
     Favorite* fav = (Favorite*)DeserializeStruct(&gFavoriteInfo, nullptr);
     fav->pageNo = pageNo;
     fav->name = str::Dup(name);
     fav->pageLabel = str::Dup(pageLabel);
+    fav->scrollX = scrollX;
+    fav->scrollY = scrollY;
     return fav;
 }
 
