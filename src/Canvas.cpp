@@ -1036,6 +1036,12 @@ static void OnMouseRightButtonDown(MainWindow* win, int x, int y) {
 
     HwndSetFocus(win->hwndFrame);
 
+    // select annotation under cursor on right-click (without centering)
+    if (win->annotationUnderCursor) {
+        WindowTab* tab = win->CurrentTab();
+        SetSelectedAnnotation(tab, win->annotationUnderCursor, true, false);
+    }
+
     win->dragStartPending = true;
     win->dragStart = Point(x, y);
 
