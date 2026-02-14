@@ -118,7 +118,6 @@ struct EditAnnotationsWindow : Wnd {
     WindowTab* tab = nullptr;
     LayoutBase* mainLayout = nullptr;
 
-    ListBox* listBox = nullptr;
     Static* staticRect = nullptr;
     Static* staticAuthor = nullptr;
     Static* staticModificationDate = nullptr;
@@ -174,8 +173,6 @@ struct EditAnnotationsWindow : Wnd {
     void OnFocus() override;
     bool PreTranslateMessage(MSG&) override;
 
-    void ListBoxSelectionChanged();
-
     ~EditAnnotationsWindow() override;
 };
 
@@ -221,13 +218,10 @@ void DeleteAnnotationAndUpdateUI(WindowTab* tab, Annotation* annot) {
 }
 
 static void DeleteSelectedAnnotation(EditAnnotationsWindow* ew) {
-    int idx = ew->listBox->GetCurrentSelection();
-    if (idx < 0) {
-        ReportIf(ew->tab->selectedAnnotation != nullptr);
+    Annotation* annot = ew->tab->selectedAnnotation;
+    if (!annot) {
         return;
     }
-    Annotation* annot = ew->annotations.at(idx);
-    ReportIf(ew->tab->selectedAnnotation != annot);
     DeleteAnnotationAndUpdateUI(ew->tab, annot);
 
     // Note: auto-selecting next annotation might cause page jumping
@@ -362,68 +356,6 @@ void NotifyAnnotationsChanged(EditAnnotationsWindow* ew) {
     }
     EnableSaveIfAnnotationsChanged(ew);
     PopulateAnnotationsSidebar(ew->tab->win);
-}
-
-static void RebuildAnnotationsListBox(EditAnnotationsWindow* ew) {
-    auto model = new ListBoxModelStrings();
-    int n = 0;
-    n = ew->annotations.Size();
-
-    DisplayModel* dm = ew->tab->AsFixed();
-    str::Str s;
-    for (int i = 0; i < n; i++) {
-        auto annot = ew->annotations.at(i);
-        s.Reset();
-        s.AppendFmt("page %d, ", annot->pageNo);
-        TempStr name = AnnotationReadableNameTemp(annot->type);
-        s.Append(name);
-        char* regionText = nullptr;
-        bool isTextMarkup = annot->type == AnnotationType::Highlight ||
-                            annot->type == AnnotationType::Underline ||
-                            annot->type == AnnotationType::Squiggly ||
-                            annot->type == AnnotationType::StrikeOut;
-        if (isTextMarkup && dm) {
-            Vec<RectF> quads = GetQuadPointsAsRect(annot);
-            str::Str textBuf;
-            for (int q = 0; q < quads.Size(); q++) {
-                char* txt = dm->GetTextInRegion(annot->pageNo, quads[q]);
-                if (!str::IsEmpty(txt)) {
-                    if (textBuf.size() > 0) {
-                        textBuf.AppendChar(' ');
-                    }
-                    textBuf.Append(txt);
-                }
-                str::Free(txt);
-            }
-            if (textBuf.size() > 0) {
-                regionText = str::Dup(textBuf.Get());
-            }
-        }
-        const char* secondLine = regionText;
-        if (str::IsEmpty(secondLine)) {
-            secondLine = Contents(annot);
-        }
-        if (!str::IsEmpty(secondLine)) {
-            s.Append("\n");
-            int len = str::Leni(secondLine);
-            if (len > 64) {
-                s.Append(secondLine, 64);
-                s.Append("...");
-            } else {
-                s.Append(secondLine);
-            }
-        }
-        str::Free(regionText);
-        model->strings.Append(s.Get());
-    }
-
-    auto topIdx = ListBoxGetTopIndex(ew->listBox->hwnd);
-    ew->listBox->SetModel(model);
-    topIdx = std::min(ew->listBox->GetCount() - 1, topIdx);
-    if (topIdx >= 0) {
-        ListBoxSetTopIndex(ew->listBox->hwnd, topIdx);
-    }
-    EnableSaveIfAnnotationsChanged(ew);
 }
 
 // TODO: this should be OnDestroy()
@@ -912,16 +844,11 @@ static void UpdateUIForSelectedAnnotation(EditAnnotationsWindow* ew, Annotation*
         DoOpacity(ew, annot);
         DoSaveEmbed(ew, annot);
 
-        // TODO: not sure it should be here as it might trigger recursive loop
-        // SetSelectedAnnotation(ew->tab, annot);
-        ew->listBox->SetCurrentSelection(itemNo);
         ew->buttonDelete->SetIsVisible(true);
         if (setEditFocus && ew->editContents->IsVisible()) {
             HwndSetFocus(ew->editContents->hwnd);
             ew->editContents->SetCursorPositionAtEnd();
         }
-    } else {
-        HwndSetFocus(ew->listBox->hwnd);
     }
 
     // TODO: get from client size
@@ -1026,7 +953,7 @@ void UpdateAnnotationsList(EditAnnotationsWindow* ew) {
     }
     auto engine = GetEngineMupdf(ew);
     EngineMupdfGetAnnotations(engine, ew->annotations);
-    RebuildAnnotationsListBox(ew);
+    EnableSaveIfAnnotationsChanged(ew);
     InvalidateAnnotationsCache(ew->tab);
     PopulateAnnotationsSidebar(ew->tab->win);
 }
@@ -1034,22 +961,6 @@ void UpdateAnnotationsList(EditAnnotationsWindow* ew) {
 static void ButtonDeleteHandler(EditAnnotationsWindow* ew) {
     ReportIf(!ew->tab->selectedAnnotation);
     DeleteSelectedAnnotation(ew);
-}
-
-static void ListBoxSelectionChanged(EditAnnotationsWindow* ew) {
-    ew->ListBoxSelectionChanged();
-}
-
-void EditAnnotationsWindow::ListBoxSelectionChanged() {
-    int itemNo = listBox->GetCurrentSelection();
-    if (!annotations.isValidIndex(itemNo)) {
-        logfa("EditAnnotationsWindow::ListBoxSelectionChanged: invalid itemNo=%d, annotations.size()=%d\n", itemNo,
-              annotations.Size());
-        ReportDebugIf(true);
-        return;
-    }
-    Annotation* annot = annotations.at(itemNo);
-    SetSelectedAnnotation(tab, annot, false);
 }
 
 static UINT_PTR gMainWindowRerenderTimer = 0;
@@ -1118,6 +1029,7 @@ static Static* CreateStatic(HWND parent, const char* s = nullptr) {
     return w;
 }
 
+#if 0
 static void DrawEditAnnotListBoxItem(ListBox::DrawItemEvent* ev) {
     ListBox* lb = ev->listBox;
     auto m = (ListBoxModelStrings*)lb->model;
@@ -1181,6 +1093,7 @@ static void DrawEditAnnotListBoxItem(ListBox::DrawItemEvent* ev) {
         SelectFont(hdc, oldFont);
     }
 }
+#endif
 
 static void CreateMainLayout(EditAnnotationsWindow* ew) {
     HWND parent = ew->hwnd;
@@ -1188,25 +1101,6 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     vbox->alignMain = MainAxisAlign::MainStart;
     vbox->alignCross = CrossAxisAlign::Stretch;
     HFONT fnt = GetAppFont();
-
-    {
-        ListBox::CreateArgs args;
-        args.parent = parent;
-        args.idealSizeLines = 5;
-        args.font = fnt;
-        auto w = new ListBox();
-        w->SetInsetsPt(4, 0);
-        w->onDrawItem = MkFunc1Void<ListBox::DrawItemEvent*>(DrawEditAnnotListBoxItem);
-        w->Create(args);
-        // set item height for 2 lines
-        int itemH = w->GetItemHeight(0);
-        SendMessageW(w->hwnd, LB_SETITEMHEIGHT, 0, itemH * 2);
-        auto lbModel = new ListBoxModelStrings();
-        w->SetModel(lbModel);
-        w->onSelectionChanged = MkFunc0(ListBoxSelectionChanged, ew);
-        ew->listBox = w;
-        vbox->AddChild(w);
-    }
 
     {
         auto w = CreateStatic(parent);
@@ -1643,12 +1537,6 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
         if (rc.dy > 0) {
             minDy = rc.dy;
         }
-    }
-
-    // if it's a tall window, up the number of items in list box
-    // from 5 to 14
-    if (minDy > 1024) {
-        ew->listBox->idealSizeLines = 14;
     }
 
     if (lastPos.IsEmpty()) {
