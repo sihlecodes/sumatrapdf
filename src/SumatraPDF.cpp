@@ -2774,9 +2774,8 @@ void LoadModelIntoTab(WindowTab* tab) {
     }
 
     // Update annotations sidebar when switching tabs
-    if (win->annotsVisible) {
-        PopulateAnnotationsSidebar(win);
-    }
+    InvalidateAnnotationsCache(tab);
+    PopulateAnnotationsSidebar(win);
 
     DisplayModel* dm = win->AsFixed();
     if (dm) {
