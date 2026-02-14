@@ -877,8 +877,10 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         return;
     }
 
-    if (IsCtrlPressed() && win->annotationUnderCursor) {
-        ShowEditAnnotationsWindow(tab);
+    if (win->annotationUnderCursor) {
+        if (IsCtrlPressed()) {
+            ShowEditAnnotationsWindow(tab);
+        }
         SetSelectedAnnotation(tab, win->annotationUnderCursor);
         return;
     }

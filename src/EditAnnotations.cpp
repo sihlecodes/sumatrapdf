@@ -990,7 +990,22 @@ void SetSelectedAnnotation(WindowTab* tab, Annotation* annot, bool setEditFocus)
     if (ew) {
         UpdateUIForSelectedAnnotation(ew, annot, setEditFocus);
         HwndMakeVisible(ew->hwnd);
-    } else if (annot) {
+    }
+    // sync the sidebar listbox selection
+    if (win->annotsListBox) {
+        if (annot) {
+            if (!tab->annotsCacheValid) {
+                PopulateAnnotationsSidebar(win);
+            }
+            int idx = tab->annotsCache.Find(annot);
+            if (idx >= 0) {
+                win->annotsListBox->SetCurrentSelection(idx);
+            }
+        } else {
+            win->annotsListBox->SetCurrentSelection(-1);
+        }
+    }
+    if (!ew && annot) {
         // Navigate to the annotation even when edit window is not open
         DisplayModel* dm = tab->AsFixed();
         if (dm) {
