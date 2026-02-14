@@ -1593,6 +1593,45 @@ void PopulateAnnotationsSidebar(MainWindow* win) {
         s.AppendFmt("page %d, ", annot->pageNo);
         TempStr name = AnnotationReadableNameTemp(annot->type);
         s.Append(name);
+        // for text markup annotations, extract the text under the annotation
+        // for others, use the Contents (comment/note) field
+        char* regionText = nullptr;
+        bool isTextMarkup = annot->type == AnnotationType::Highlight ||
+                            annot->type == AnnotationType::Underline ||
+                            annot->type == AnnotationType::Squiggly ||
+                            annot->type == AnnotationType::StrikeOut;
+        if (isTextMarkup) {
+            Vec<RectF> quads = GetQuadPointsAsRect(annot);
+            str::Str textBuf;
+            for (int q = 0; q < quads.Size(); q++) {
+                char* txt = dm->GetTextInRegion(annot->pageNo, quads[q]);
+                if (!str::IsEmpty(txt)) {
+                    if (textBuf.size() > 0) {
+                        textBuf.AppendChar(' ');
+                    }
+                    textBuf.Append(txt);
+                }
+                str::Free(txt);
+            }
+            if (textBuf.size() > 0) {
+                regionText = str::Dup(textBuf.Get());
+            }
+        }
+        const char* secondLine = regionText;
+        if (str::IsEmpty(secondLine)) {
+            secondLine = Contents(annot);
+        }
+        if (!str::IsEmpty(secondLine)) {
+            s.Append("\n");
+            int len = str::Leni(secondLine);
+            if (len > 64) {
+                s.Append(secondLine, 64);
+                s.Append("...");
+            } else {
+                s.Append(secondLine);
+            }
+        }
+        str::Free(regionText);
         model->strings.Append(s.Get());
     }
     win->annotsListBox->SetModel(model);
@@ -1796,6 +1835,30 @@ static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
         return CallWindowProc(gWndProcAnnotsBox, hwnd, msg, wp, lp);
     }
 
+    // TryReflectMessages treats lparam as HWND, which is wrong for
+    // WM_DRAWITEM/WM_MEASUREITEM. Reflect them manually.
+    if (msg == WM_DRAWITEM) {
+        DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lp;
+        Wnd* pWnd = WndListFindByHwnd(dis->hwndItem);
+        if (pWnd) {
+            return pWnd->OnMessageReflect(msg, wp, lp);
+        }
+    }
+    if (msg == WM_MEASUREITEM) {
+        Wnd* pWnd = nullptr;
+        HWND child = GetDlgItem(hwnd, (int)wp);
+        if (child) {
+            pWnd = WndListFindByHwnd(child);
+        }
+        if (!pWnd && wp == 0) {
+            child = FindWindowExW(hwnd, nullptr, L"LISTBOX", nullptr);
+            pWnd = WndListFindByHwnd(child);
+        }
+        if (pWnd) {
+            return pWnd->OnMessageReflect(msg, wp, lp);
+        }
+    }
+
     LRESULT res = TryReflectMessages(hwnd, msg, wp, lp);
     if (res) {
         return res;
@@ -1814,6 +1877,70 @@ static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
     return CallWindowProc(gWndProcAnnotsBox, hwnd, msg, wp, lp);
 }
 
+static void DrawAnnotListBoxItem(ListBox::DrawItemEvent* ev) {
+    ListBox* lb = ev->listBox;
+    auto m = (ListBoxModelStrings*)lb->model;
+    if (ev->itemIndex < 0 || ev->itemIndex >= m->ItemsCount()) {
+        return;
+    }
+
+    HDC hdc = ev->hdc;
+    RECT rc = ev->itemRect;
+
+    COLORREF colBg = IsSpecialColor(lb->bgColor) ? GetSysColor(COLOR_WINDOW) : lb->bgColor;
+    COLORREF colText = IsSpecialColor(lb->textColor) ? GetSysColor(COLOR_WINDOWTEXT) : lb->textColor;
+    if (ev->selected) {
+        colBg = GetSysColor(COLOR_HIGHLIGHT);
+        colText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+    }
+
+    SetBkColor(hdc, colBg);
+    ExtTextOutW(hdc, 0, 0, ETO_OPAQUE, &rc, nullptr, 0, nullptr);
+
+    const char* itemText = m->Item(ev->itemIndex);
+
+    SetTextColor(hdc, colText);
+    SetBkMode(hdc, TRANSPARENT);
+
+    HFONT oldFont = nullptr;
+    if (lb->font) {
+        oldFont = SelectFont(hdc, lb->font);
+    }
+
+    int pad = DpiScale(lb->hwnd, 4);
+    const char* nl = str::FindChar(itemText, '\n');
+
+    if (nl) {
+        int lineH = (rc.bottom - rc.top) / 2;
+        RECT rcLine1 = rc;
+        rcLine1.left += pad;
+        rcLine1.bottom = rcLine1.top + lineH;
+
+        TempStr line1 = str::DupTemp(itemText, nl - itemText);
+        auto ws1 = ToWStrTemp(line1);
+        DrawTextW(hdc, ws1, -1, &rcLine1, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+        RECT rcLine2 = rc;
+        rcLine2.left += pad;
+        rcLine2.top += lineH;
+
+        COLORREF colSecondary = ev->selected ? colText : GetSysColor(COLOR_GRAYTEXT);
+        SetTextColor(hdc, colSecondary);
+
+        auto ws2 = ToWStrTemp(nl + 1);
+        DrawTextW(hdc, ws2, -1, &rcLine2, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    } else {
+        RECT rcText = rc;
+        rcText.left += pad;
+        auto ws = ToWStrTemp(itemText);
+        DrawTextW(hdc, ws, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    }
+
+    if (oldFont) {
+        SelectFont(hdc, oldFont);
+    }
+}
+
 static void CreateAnnotationsSidebar(MainWindow* win) {
     HMODULE h = GetModuleHandleW(nullptr);
     int dx = gGlobalPrefs->sidebarDx;
@@ -1828,7 +1955,11 @@ static void CreateAnnotationsSidebar(MainWindow* win) {
         args.idealSizeLines = 5;
         args.font = GetAppFont();
         args.exStyle = WS_EX_STATICEDGE;
+        listBox->onDrawItem = MkFunc1Void<ListBox::DrawItemEvent*>(DrawAnnotListBoxItem);
         listBox->Create(args);
+        // set item height for 2 lines
+        int itemH = listBox->GetItemHeight(0);
+        SendMessageW(listBox->hwnd, LB_SETITEMHEIGHT, 0, itemH * 2);
     }
     auto lbModel = new ListBoxModelStrings();
     listBox->SetModel(lbModel);

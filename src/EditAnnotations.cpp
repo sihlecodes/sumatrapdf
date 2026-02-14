@@ -369,6 +369,7 @@ static void RebuildAnnotationsListBox(EditAnnotationsWindow* ew) {
     int n = 0;
     n = ew->annotations.Size();
 
+    DisplayModel* dm = ew->tab->AsFixed();
     str::Str s;
     for (int i = 0; i < n; i++) {
         auto annot = ew->annotations.at(i);
@@ -376,6 +377,43 @@ static void RebuildAnnotationsListBox(EditAnnotationsWindow* ew) {
         s.AppendFmt("page %d, ", annot->pageNo);
         TempStr name = AnnotationReadableNameTemp(annot->type);
         s.Append(name);
+        char* regionText = nullptr;
+        bool isTextMarkup = annot->type == AnnotationType::Highlight ||
+                            annot->type == AnnotationType::Underline ||
+                            annot->type == AnnotationType::Squiggly ||
+                            annot->type == AnnotationType::StrikeOut;
+        if (isTextMarkup && dm) {
+            Vec<RectF> quads = GetQuadPointsAsRect(annot);
+            str::Str textBuf;
+            for (int q = 0; q < quads.Size(); q++) {
+                char* txt = dm->GetTextInRegion(annot->pageNo, quads[q]);
+                if (!str::IsEmpty(txt)) {
+                    if (textBuf.size() > 0) {
+                        textBuf.AppendChar(' ');
+                    }
+                    textBuf.Append(txt);
+                }
+                str::Free(txt);
+            }
+            if (textBuf.size() > 0) {
+                regionText = str::Dup(textBuf.Get());
+            }
+        }
+        const char* secondLine = regionText;
+        if (str::IsEmpty(secondLine)) {
+            secondLine = Contents(annot);
+        }
+        if (!str::IsEmpty(secondLine)) {
+            s.Append("\n");
+            int len = str::Leni(secondLine);
+            if (len > 64) {
+                s.Append(secondLine, 64);
+                s.Append("...");
+            } else {
+                s.Append(secondLine);
+            }
+        }
+        str::Free(regionText);
         model->strings.Append(s.Get());
     }
 
@@ -1065,6 +1103,70 @@ static Static* CreateStatic(HWND parent, const char* s = nullptr) {
     return w;
 }
 
+static void DrawEditAnnotListBoxItem(ListBox::DrawItemEvent* ev) {
+    ListBox* lb = ev->listBox;
+    auto m = (ListBoxModelStrings*)lb->model;
+    if (ev->itemIndex < 0 || ev->itemIndex >= m->ItemsCount()) {
+        return;
+    }
+
+    HDC hdc = ev->hdc;
+    RECT rc = ev->itemRect;
+
+    COLORREF colBg = IsSpecialColor(lb->bgColor) ? GetSysColor(COLOR_WINDOW) : lb->bgColor;
+    COLORREF colText = IsSpecialColor(lb->textColor) ? GetSysColor(COLOR_WINDOWTEXT) : lb->textColor;
+    if (ev->selected) {
+        colBg = GetSysColor(COLOR_HIGHLIGHT);
+        colText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+    }
+
+    SetBkColor(hdc, colBg);
+    ExtTextOutW(hdc, 0, 0, ETO_OPAQUE, &rc, nullptr, 0, nullptr);
+
+    const char* itemText = m->Item(ev->itemIndex);
+
+    SetTextColor(hdc, colText);
+    SetBkMode(hdc, TRANSPARENT);
+
+    HFONT oldFont = nullptr;
+    if (lb->font) {
+        oldFont = SelectFont(hdc, lb->font);
+    }
+
+    int pad = DpiScale(lb->hwnd, 4);
+    const char* nl = str::FindChar(itemText, '\n');
+
+    if (nl) {
+        int lineH = (rc.bottom - rc.top) / 2;
+        RECT rcLine1 = rc;
+        rcLine1.left += pad;
+        rcLine1.bottom = rcLine1.top + lineH;
+
+        TempStr line1 = str::DupTemp(itemText, nl - itemText);
+        auto ws1 = ToWStrTemp(line1);
+        DrawTextW(hdc, ws1, -1, &rcLine1, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+        RECT rcLine2 = rc;
+        rcLine2.left += pad;
+        rcLine2.top += lineH;
+
+        COLORREF colSecondary = ev->selected ? colText : GetSysColor(COLOR_GRAYTEXT);
+        SetTextColor(hdc, colSecondary);
+
+        auto ws2 = ToWStrTemp(nl + 1);
+        DrawTextW(hdc, ws2, -1, &rcLine2, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    } else {
+        RECT rcText = rc;
+        rcText.left += pad;
+        auto ws = ToWStrTemp(itemText);
+        DrawTextW(hdc, ws, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    }
+
+    if (oldFont) {
+        SelectFont(hdc, oldFont);
+    }
+}
+
 static void CreateMainLayout(EditAnnotationsWindow* ew) {
     HWND parent = ew->hwnd;
     auto vbox = new VBox();
@@ -1079,7 +1181,11 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         args.font = fnt;
         auto w = new ListBox();
         w->SetInsetsPt(4, 0);
+        w->onDrawItem = MkFunc1Void<ListBox::DrawItemEvent*>(DrawEditAnnotListBoxItem);
         w->Create(args);
+        // set item height for 2 lines
+        int itemH = w->GetItemHeight(0);
+        SendMessageW(w->hwnd, LB_SETITEMHEIGHT, 0, itemH * 2);
         auto lbModel = new ListBoxModelStrings();
         w->SetModel(lbModel);
         w->onSelectionChanged = MkFunc0(ListBoxSelectionChanged, ew);
