@@ -1132,8 +1132,8 @@ static void
 pdf_write_highlight_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf, fz_rect *rect, pdf_obj **res)
 {
 	pdf_obj *qp;
-	fz_point quad[4], mquad[4], v;
-	float h, m, dx, dy, vn;
+	fz_point quad[4];
+	float h;
 	int i, n;
 
 	*rect = fz_empty_rect;
@@ -1147,36 +1147,44 @@ pdf_write_highlight_appearance(fz_context *ctx, pdf_annot *annot, fz_buffer *buf
 	{
 		for (i = 0; i < n; i += 8)
 		{
+			float x0, y0, x1, y1, r, k;
+
 			h = extract_quad(ctx, quad, qp, i);
-			m = h / 4.2425f; /* magic number that matches adobe's appearance */
-			dx = quad[LR].x - quad[LL].x;
-			dy = quad[LR].y - quad[LL].y;
-			vn = sqrtf(dx * dx + dy * dy);
-			v = fz_make_point(dx * m / vn, dy * m / vn);
 
-			mquad[LL].x = quad[LL].x - v.x - v.y;
-			mquad[LL].y = quad[LL].y - v.y + v.x;
-			mquad[UL].x = quad[UL].x - v.x + v.y;
-			mquad[UL].y = quad[UL].y - v.y - v.x;
-			mquad[LR].x = quad[LR].x + v.x - v.y;
-			mquad[LR].y = quad[LR].y + v.y + v.x;
-			mquad[UR].x = quad[UR].x + v.x + v.y;
-			mquad[UR].y = quad[UR].y + v.y - v.x;
+			/* compute axis-aligned bounding box of the quad */
+			x0 = fz_min(fz_min(quad[UL].x, quad[UR].x), fz_min(quad[LL].x, quad[LR].x));
+			y0 = fz_min(fz_min(quad[UL].y, quad[UR].y), fz_min(quad[LL].y, quad[LR].y));
+			x1 = fz_max(fz_max(quad[UL].x, quad[UR].x), fz_max(quad[LL].x, quad[LR].x));
+			y1 = fz_max(fz_max(quad[UL].y, quad[UR].y), fz_max(quad[LL].y, quad[LR].y));
 
-			fz_append_printf(ctx, buf, "%g %g m\n", quad[LL].x, quad[LL].y);
+			r = 2.0f; /* corner radius in points */
+			if (r > (x1 - x0) / 2) r = (x1 - x0) / 2;
+			if (r > (y1 - y0) / 2) r = (y1 - y0) / 2;
+			k = 0.5522847498f * r; /* kappa for circular arc approximation */
+
+			/* draw rounded rectangle: start at bottom-left, just above the corner */
+			fz_append_printf(ctx, buf, "%g %g m\n", x0, y0 + r);
+			/* bottom-left corner */
 			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
-				mquad[LL].x, mquad[LL].y,
-				mquad[UL].x, mquad[UL].y,
-				quad[UL].x, quad[UL].y);
-			fz_append_printf(ctx, buf, "%g %g l\n", quad[UR].x, quad[UR].y);
+				x0, y0 + r - k, x0 + r - k, y0, x0 + r, y0);
+			/* bottom edge to bottom-right corner */
+			fz_append_printf(ctx, buf, "%g %g l\n", x1 - r, y0);
+			/* bottom-right corner */
 			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
-				mquad[UR].x, mquad[UR].y,
-				mquad[LR].x, mquad[LR].y,
-				quad[LR].x, quad[LR].y);
+				x1 - r + k, y0, x1, y0 + r - k, x1, y0 + r);
+			/* right edge to top-right corner */
+			fz_append_printf(ctx, buf, "%g %g l\n", x1, y1 - r);
+			/* top-right corner */
+			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+				x1, y1 - r + k, x1 - r + k, y1, x1 - r, y1);
+			/* top edge to top-left corner */
+			fz_append_printf(ctx, buf, "%g %g l\n", x0 + r, y1);
+			/* top-left corner */
+			fz_append_printf(ctx, buf, "%g %g %g %g %g %g c\n",
+				x0 + r - k, y1, x0, y1 - r + k, x0, y1 - r);
 			fz_append_printf(ctx, buf, "f\n");
 
 			union_quad(rect, quad, h/16);
-			union_quad(rect, mquad, 0);
 		}
 	}
 }
