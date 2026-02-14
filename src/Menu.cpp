@@ -1856,6 +1856,8 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         TempStr t = AnnotationReadableNameTemp(ctx->annotationUnderCursor->type);
         TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
         MenuSetText(popup, CmdEditAnnotations, s);
+    } else {
+        MenuRemove(popup, CmdEditAnnotations);
     }
 
     const char* filePath = win->ctrl->GetFilePath();
