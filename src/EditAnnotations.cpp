@@ -854,8 +854,7 @@ static void UpdateUIForSelectedAnnotation(EditAnnotationsWindow* ew, Annotation*
     // TODO: get from client size
     auto currBounds = ew->mainLayout->lastBounds;
     int dx = currBounds.dx;
-    int dy = currBounds.dy;
-    LayoutAndSizeToContent(ew->mainLayout, dx, dy, ew->hwnd);
+    LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
 
     if (!annot) {
         return;
@@ -1142,6 +1141,7 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
         args.idealSizeLines = 5;
         args.font = fnt;
         auto w = new Edit();
+        w->SetInsetsPt(4, 0, 0, 0);
         HWND hwnd = w->Create(args);
         ReportIf(!hwnd);
         w->maxDx = 150;
@@ -1439,47 +1439,53 @@ static void CreateMainLayout(EditAnnotationsWindow* ew) {
     }
 
     {
-        // used to take all available space between the what's above and below
-        auto w = new Spacer(0, 0);
-        vbox->AddChild(w, 1);
-    }
-
-    {
-        Button::CreateArgs args;
-        args.parent = parent;
-        // TODO: maybe  file name e.g. "Save changes to foo.pdf"
-        args.text = _TRA("Save changes to existing PDF");
-        args.font = fnt;
-
-        auto w = new Button();
-        HWND hwnd = w->Create(args);
-        ReportIf(!hwnd);
-
-        w->SetIsEnabled(false); // only enabled if there are changes
-        w->onClick = MkFunc0(ButtonSaveToCurrentPDFHandler, ew);
-        ew->buttonSaveToCurrentFile = w;
+        auto w = CreateStatic(parent, _TRA("Save to:"));
+        w->SetInsetsPt(16, 0, 4, 0);
         vbox->AddChild(w);
     }
 
     {
-        Button::CreateArgs args;
-        args.parent = parent;
-        // TODO: maybe  file name e.g. "Save changes to foo.pdf"
-        args.text = _TRA("Save changes to a new PDF");
-        args.font = fnt;
+        auto hbox = new HBox();
+        hbox->alignMain = MainAxisAlign::Homogeneous;
+        hbox->alignCross = CrossAxisAlign::Stretch;
 
-        auto w = new Button();
-        w->SetInsetsPt(8, 0, 0, 0);
-        HWND hwnd = w->Create(args);
-        ReportIf(!hwnd);
+        {
+            Button::CreateArgs args;
+            args.parent = parent;
+            args.text = _TRA("Current PDF");
+            args.font = fnt;
 
-        w->SetIsEnabled(false); // only enabled if there are changes
-        w->onClick = MkFunc0(ButtonSaveToNewFileHandler, ew);
-        ew->buttonSaveToNewFile = w;
-        vbox->AddChild(w);
+            auto w = new Button();
+            HWND hwnd = w->Create(args);
+            ReportIf(!hwnd);
+
+            w->SetIsEnabled(false);
+            w->onClick = MkFunc0(ButtonSaveToCurrentPDFHandler, ew);
+            ew->buttonSaveToCurrentFile = w;
+            hbox->AddChild(w, 1);
+        }
+
+        {
+            Button::CreateArgs args;
+            args.parent = parent;
+            args.text = _TRA("New PDF");
+            args.font = fnt;
+
+            auto w = new Button();
+            w->SetInsetsPt(0, 0, 0, 4);
+            HWND hwnd = w->Create(args);
+            ReportIf(!hwnd);
+
+            w->SetIsEnabled(false);
+            w->onClick = MkFunc0(ButtonSaveToNewFileHandler, ew);
+            ew->buttonSaveToNewFile = w;
+            hbox->AddChild(w, 1);
+        }
+
+        vbox->AddChild(hbox);
     }
 
-    auto padding = new Padding(vbox, DpiScaledInsets(parent, 4, 8));
+    auto padding = new Padding(vbox, DpiScaledInsets(parent, 4, 8, 4, 8));
     ew->mainLayout = padding;
     HidePerAnnotControls(ew);
 }
@@ -1527,24 +1533,13 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
     UpdateAnnotationsList(ew);
 
     Rect lastPos = tab->lastEditAnnotsWindowPos;
-    // size our editor window to be the same height as main window
-    int minDy = lastPos.dy;
-    if (minDy == 0) {
-        minDy = 720;
-        // TODO: this is slightly less that wanted
-        HWND hwnd = tab->win->hwndCanvas;
-        auto rc = ClientRect(hwnd);
-        if (rc.dy > 0) {
-            minDy = rc.dy;
-        }
-    }
+    int dx = lastPos.dx > 0 ? lastPos.dx : 520;
 
     if (lastPos.IsEmpty()) {
-        LayoutAndSizeToContent(ew->mainLayout, 520, minDy, ew->hwnd);
+        LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
         HwndPositionToTheRightOf(ew->hwnd, tab->win->hwndFrame);
     } else {
-        int dx = lastPos.dx;
-        LayoutAndSizeToContent(ew->mainLayout, dx, minDy, ew->hwnd);
+        LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
         Rect r = ShiftRectToWorkArea(lastPos, ew->hwnd, true);
         SetWindowPos(ew->hwnd, nullptr, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
     }
