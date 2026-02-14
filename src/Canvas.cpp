@@ -884,6 +884,10 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         SetSelectedAnnotation(tab, win->annotationUnderCursor, true, false);
         return;
     }
+    else {
+        SetSelectedAnnotation(tab, nullptr, false, false);
+        return;
+    }
 
     if (link && link->GetRect().Contains(ptPage)) {
         /* follow an active link */
