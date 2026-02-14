@@ -1838,6 +1838,78 @@ static void LayoutAnnotsContainer(HWND hwndListBox) {
     MoveWindow(hwndListBox, 0, 0, rc.dx, rc.dy, TRUE);
 }
 
+// clang-format off
+static MenuDef menuDefContextAnnotsSidebar[] = {
+    {
+        _TRN("Edit Annotations"),
+        CmdEditAnnotations,
+    },
+    {
+        _TRN("Delete Annotation"),
+        CmdDeleteAnnotation,
+    },
+    {
+        nullptr,
+        0,
+    },
+};
+// clang-format on
+
+static void AnnotsListBoxContextMenu(MainWindow* win, int x, int y) {
+    if (!win || !win->annotsListBox) {
+        return;
+    }
+    WindowTab* tab = win->CurrentTab();
+    if (!tab) {
+        return;
+    }
+
+    HWND lbHwnd = win->annotsListBox->hwnd;
+    POINT pt = {x, y};
+    if (x == -1 && y == -1) {
+        // keyboard invocation: use the selected item's position
+        int sel = win->annotsListBox->GetCurrentSelection();
+        if (sel < 0) {
+            return;
+        }
+        RECT itemRect{};
+        SendMessageW(lbHwnd, LB_GETITEMRECT, sel, (LPARAM)&itemRect);
+        pt = {itemRect.left + (itemRect.right - itemRect.left) / 2, itemRect.top + (itemRect.bottom - itemRect.top) / 2};
+        MapWindowPoints(lbHwnd, HWND_DESKTOP, &pt, 1);
+    }
+
+    // determine which item was right-clicked
+    POINT clientPt = pt;
+    ScreenToClient(lbHwnd, &clientPt);
+    LRESULT lr = SendMessageW(lbHwnd, LB_ITEMFROMPOINT, 0, MAKELPARAM(clientPt.x, clientPt.y));
+    int idx = LOWORD(lr);
+    if (HIWORD(lr) != 0) {
+        return; // click outside items
+    }
+    if (idx < 0 || idx >= tab->annotsCache.Size()) {
+        return;
+    }
+
+    // select the item under right-click
+    win->annotsListBox->SetCurrentSelection(idx);
+    Annotation* annot = tab->annotsCache.at(idx);
+    SetSelectedAnnotation(tab, annot, false);
+
+    HMENU popup = BuildMenuFromDef(menuDefContextAnnotsSidebar, CreatePopupMenu(), nullptr);
+    MarkMenuOwnerDraw(popup);
+    uint flags = TPM_RETURNCMD | TPM_RIGHTBUTTON;
+    int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
+    FreeMenuOwnerDrawInfoData(popup);
+    DestroyMenu(popup);
+
+    if (cmd == CmdEditAnnotations) {
+        ShowEditAnnotationsWindow(tab);
+        SetSelectedAnnotation(tab, annot);
+    } else if (cmd == CmdDeleteAnnotation) {
+        DeleteAnnotationAndUpdateUI(tab, annot);
+    }
+}
+
 static WNDPROC gWndProcAnnotsBox = nullptr;
 static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     MainWindow* win = FindMainWindowByHwnd(hwnd);
@@ -1880,6 +1952,13 @@ static LRESULT CALLBACK WndProcAnnotsBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
                 LayoutAnnotsContainer(win->annotsListBox->hwnd);
             }
             break;
+
+        case WM_CONTEXTMENU: {
+            int x = GET_X_LPARAM(lp);
+            int y = GET_Y_LPARAM(lp);
+            AnnotsListBoxContextMenu(win, x, y);
+            return 0;
+        }
 
         case WM_COMMAND:
             break;
