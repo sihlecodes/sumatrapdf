@@ -1537,7 +1537,7 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
 
     if (lastPos.IsEmpty()) {
         LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
-        HwndPositionToTheRightOf(ew->hwnd, tab->win->hwndFrame);
+        HwndPositionInCenterOf(ew->hwnd, tab->win->hwndFrame);
     } else {
         LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
         Rect r = ShiftRectToWorkArea(lastPos, ew->hwnd, true);
@@ -1547,6 +1547,9 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
     ew->skipGoToPage = (annot != nullptr);
     if (annot) {
         UpdateUIForSelectedAnnotation(ew, annot, true);
+        if (lastPos.IsEmpty()) {
+            HwndPositionInCenterOf(ew->hwnd, tab->win->hwndFrame);
+        }
     }
     if (gUseDarkModeLib) {
         DarkMode::setDarkWndNotifySafe(ew->hwnd);
