@@ -791,12 +791,8 @@ static MenuDef menuDefContext[] = {
         CmdFavoriteDel,
     },
     {
-        _TRN("Show &Favorites"),
-        CmdFavoriteToggle,
-    },
-    {
-        _TRN("Show &Bookmarks"),
-        CmdToggleBookmarks,
+        _TRN("Show &Sidebar"),
+        CmdToggleSidebar,
     },
     {
         _TRN("Show &Toolbar"),
@@ -1848,13 +1844,11 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     SetMenuStateForSelection(tab, popup);
 
     MenuUpdatePrintItem(win, popup, true);
-    MenuSetEnabled(popup, CmdToggleBookmarks, win->ctrl->HasToc());
-    MenuSetChecked(popup, CmdToggleBookmarks, win->tocVisible);
 
     MenuSetChecked(popup, CmdToggleScrollbars, !gGlobalPrefs->fixedPageUI.hideScrollbars);
 
-    MenuSetEnabled(popup, CmdFavoriteToggle, HasFavorites());
-    MenuSetChecked(popup, CmdFavoriteToggle, gGlobalPrefs->showFavorites);
+    bool sidebarVisible = win->tocVisible || gGlobalPrefs->showFavorites || win->annotsVisible;
+    MenuSetChecked(popup, CmdToggleSidebar, sidebarVisible);
 
     if (ctx->annotationUnderCursor) {
         // change from generic "Edit Annotations" to more specific
@@ -1862,6 +1856,8 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         TempStr t = AnnotationReadableNameTemp(ctx->annotationUnderCursor->type);
         TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
         MenuSetText(popup, CmdEditAnnotations, s);
+    } else {
+        MenuRemove(popup, CmdEditAnnotations);
     }
 
     const char* filePath = win->ctrl->GetFilePath();
@@ -1927,6 +1923,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         case CmdToggleBookmarks:
         case CmdToggleTableOfContents:
         case CmdFavoriteToggle:
+        case CmdToggleSidebar:
         case CmdProperties:
         case CmdToggleToolbar:
         case CmdToggleScrollbars:

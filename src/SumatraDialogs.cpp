@@ -1000,6 +1000,7 @@ HPROPSHEETPAGE CreatePrintAdvancedPropSheet(Print_Advanced_Data* data, ScopedMem
 struct Dialog_AddFav_Data {
     char* pageNo = nullptr;
     char* favName = nullptr;
+    bool isEdit = false;
     ~Dialog_AddFav_Data() {
         str::Free(pageNo);
         str::Free(favName);
@@ -1013,8 +1014,17 @@ static INT_PTR CALLBACK Dialog_AddFav_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARA
         if (gUseDarkModeLib) {
             DarkMode::setDarkWndSafe(hDlg);
         }
-        HwndSetText(hDlg, _TRA("Add Favorite"));
-        TempStr s = str::FormatTemp(_TRA("Add page %s to favorites with (optional) name:"), data->pageNo);
+        if (data->isEdit) {
+            HwndSetText(hDlg, _TRA("Edit Favorite"));
+        } else {
+            HwndSetText(hDlg, _TRA("Add Favorite"));
+        }
+        TempStr s;
+        if (data->isEdit) {
+            s = str::FormatTemp(_TRA("Edit name for page %s:"), data->pageNo);
+        } else {
+            s = str::FormatTemp(_TRA("Add page %s to favorites with (optional) name:"), data->pageNo);
+        }
         HwndSetDlgItemText(hDlg, IDC_ADD_PAGE_STATIC, s);
         HwndSetDlgItemText(hDlg, IDOK, _TRA("OK"));
         HwndSetDlgItemText(hDlg, IDCANCEL, _TRA("Cancel"));
@@ -1057,6 +1067,21 @@ bool Dialog_AddFavorite(HWND hwnd, const char* pageNo, AutoFreeStr& favName) {
     Dialog_AddFav_Data data;
     data.pageNo = str::Dup(pageNo);
     data.favName = str::Dup(favName);
+
+    INT_PTR res = CreateDialogBox(IDD_DIALOG_FAV_ADD, hwnd, Dialog_AddFav_Proc, (LPARAM)&data);
+    if (IDCANCEL == res) {
+        return false;
+    }
+
+    favName.SetCopy(data.favName);
+    return true;
+}
+
+bool Dialog_EditFavorite(HWND hwnd, const char* pageNo, AutoFreeStr& favName) {
+    Dialog_AddFav_Data data;
+    data.pageNo = str::Dup(pageNo);
+    data.favName = str::Dup(favName);
+    data.isEdit = true;
 
     INT_PTR res = CreateDialogBox(IDD_DIALOG_FAV_ADD, hwnd, Dialog_AddFav_Proc, (LPARAM)&data);
     if (IDCANCEL == res) {

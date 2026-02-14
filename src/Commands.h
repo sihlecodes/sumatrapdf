@@ -37,6 +37,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdPresentationWhiteBackground, "Presentation White Background")             \
     V(CmdPresentationBlackBackground, "Presentation Black Background")             \
     V(CmdTogglePresentationMode, "View: Presentation Mode")                        \
+    V(CmdToggleSidebar, "Toggle Sidebar")                                          \
     V(CmdToggleToolbar, "Toggle Toolbar")                                          \
     V(CmdToggleScrollbars, "Toggle Scrollbars")                                    \
     V(CmdToggleMenuBar, "Toggle Menu Bar")                                         \
@@ -138,6 +139,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdMoveFrameFocus, "Move Frame Focus")                                       \
     V(CmdFavoriteAdd, "Add Favorite")                                              \
     V(CmdFavoriteDel, "Delete Favorite")                                           \
+    V(CmdFavoriteEdit, "Edit Favorite")                                            \
     V(CmdFavoriteToggle, "Toggle Favorites")                                       \
     V(CmdToggleLinks, "Toggle Show Links")                                         \
     V(CmdCreateAnnotText, "Create Text Annotation")                                \

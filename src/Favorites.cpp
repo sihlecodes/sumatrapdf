@@ -818,6 +818,10 @@ static void FavTreeSelectionChanged(TreeView::SelectionChangedEvent* ev) {
 // clang-format off
 static MenuDef menuDefContextFav[] = {
     {
+        _TRN("Edit favorite"),
+        CmdFavoriteEdit
+    },
+    {
         _TRN("Remove from favorites"),
         CmdFavoriteDel
     },
@@ -840,11 +844,35 @@ static void FavTreeContextMenu(ContextMenuEvent* ev) {
         return;
     }
     HMENU popup = BuildMenuFromDef(menuDefContextFav, CreatePopupMenu(), nullptr);
+    FavTreeItem* fti = (FavTreeItem*)ti;
+    // "Edit favorite" only applies to individual favorites (child nodes), not file nodes
+    if (!fti->parent) {
+        MenuRemove(popup, CmdFavoriteEdit);
+    }
     MarkMenuOwnerDraw(popup);
     uint flags = TPM_RETURNCMD | TPM_RIGHTBUTTON;
     int cmd = TrackPopupMenu(popup, flags, pt.x, pt.y, 0, win->hwndFrame, nullptr);
     FreeMenuOwnerDrawInfoData(popup);
     DestroyMenu(popup);
+
+    if (CmdFavoriteEdit == cmd) {
+        Favorite* fav = fti->favorite;
+        FileState* f = GetByFavorite(fav);
+        if (f) {
+            TempStr pageLabel = str::FormatTemp("%d", fav->pageNo);
+            if (fav->pageLabel) {
+                pageLabel = fav->pageLabel;
+            }
+            AutoFreeStr name = str::Dup(fav->name);
+            bool shouldRename = Dialog_EditFavorite(win->hwndFrame, pageLabel, name);
+            if (shouldRename) {
+                RememberFavTreeExpansionStateForAllWindows();
+                str::ReplaceWithCopy(&fav->name, name);
+                UpdateFavoritesTreeForAllWindows();
+                SaveSettings();
+            }
+        }
+    }
 
     // TODO: it would be nice to have a system for undo-ing things, like in Gmail,
     // so that we can do destructive operations without asking for permission via
@@ -852,7 +880,6 @@ static void FavTreeContextMenu(ContextMenuEvent* ev) {
     // by mistake
     if (CmdFavoriteDel == cmd) {
         RememberFavTreeExpansionStateForAllWindows();
-        FavTreeItem* fti = (FavTreeItem*)ti;
         Favorite* toDelete = fti->favorite;
         
         if (fti->parent) {

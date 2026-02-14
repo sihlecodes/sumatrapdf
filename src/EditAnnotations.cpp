@@ -222,7 +222,9 @@ static void DeleteSelectedAnnotation(EditAnnotationsWindow* ew) {
     if (!annot) {
         return;
     }
-    DeleteAnnotationAndUpdateUI(ew->tab, annot);
+    WindowTab* tab = ew->tab;
+    DeleteAnnotationAndUpdateUI(tab, annot);
+    CloseAndDeleteEditAnnotationsWindow(tab);
 
     // Note: auto-selecting next annotation might cause page jumping
 #if 0
