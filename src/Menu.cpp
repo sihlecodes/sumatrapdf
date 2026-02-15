@@ -1396,7 +1396,8 @@ std::pair<bool, bool> GetCommandIdState(BuildMenuCtx* ctx, int cmdId) {
 
     disable |= (!ctx->hasSelection && cmdIdInList(disableIfNoSelection));
     // disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdSelectAnnotation));
-    disable |= (!ctx->annotationUnderCursor && (cmdId == CmdDeleteAnnotation));
+    bool hasAnnotToDelete = ctx->annotationUnderCursor || (ctx->tab && ctx->tab->selectedAnnotation);
+    disable |= (!hasAnnotToDelete && (cmdId == CmdDeleteAnnotation));
     disable |= !ctx->hasUnsavedAnnotations && (cmdId == CmdSaveAnnotations);
     return {remove, disable};
 }
@@ -1856,6 +1857,10 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
         TempStr t = AnnotationReadableNameTemp(ctx->annotationUnderCursor->type);
         TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
         MenuSetText(popup, CmdEditAnnotations, s);
+    } else if (tab && tab->selectedAnnotation) {
+        TempStr t = AnnotationReadableNameTemp(tab->selectedAnnotation->type);
+        TempStr s = str::FormatTemp(_TRN("Edit %s Annotation"), t);
+        MenuSetText(popup, CmdEditAnnotations, s);
     } else {
         MenuRemove(popup, CmdEditAnnotations);
     }
@@ -1942,12 +1947,23 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
             [[fallthrough]];
 #endif
 
-        case CmdEditAnnotations:
+        case CmdEditAnnotations: {
             ShowEditAnnotationsWindow(tab);
-            SetSelectedAnnotation(tab, ctx->annotationUnderCursor, true, false);
+            Annotation* annotToEdit = ctx->annotationUnderCursor;
+            if (!annotToEdit) {
+                annotToEdit = tab->selectedAnnotation;
+            }
+            SetSelectedAnnotation(tab, annotToEdit, true, false);
             break;
+        }
         case CmdDeleteAnnotation: {
-            DeleteAnnotationAndUpdateUI(tab, ctx->annotationUnderCursor);
+            Annotation* annotToDel = ctx->annotationUnderCursor;
+            if (!annotToDel) {
+                annotToDel = tab->selectedAnnotation;
+            }
+            if (annotToDel) {
+                DeleteAnnotationAndUpdateUI(tab, annotToDel);
+            }
             break;
         }
         case CmdCopyLinkTarget: {

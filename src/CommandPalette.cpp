@@ -230,6 +230,7 @@ struct CommandPaletteBuildCtx {
     bool isChm = false;
     bool canSendEmail = false;
     Annotation* annotationUnderCursor = nullptr;
+    bool hasSelectedAnnotation = false;
     bool hasUnsavedAnnotations = false;
     bool isCursorOnPage = false;
     bool cursorOnLinkTarget = false;
@@ -335,7 +336,7 @@ static bool AllowCommand(const CommandPaletteBuildCtx& ctx, i32 cmdId) {
         return false;
     }
 
-    if (!ctx.annotationUnderCursor) {
+    if (!ctx.annotationUnderCursor && !ctx.hasSelectedAnnotation) {
         //        if ((cmdId == CmdSelectAnnotation) || (cmdId == CmdDeleteAnnotation)) {
         if (cmdId == CmdDeleteAnnotation) {
             return false;
@@ -445,6 +446,9 @@ void CommandPaletteWnd::CollectStrings(MainWindow* mainWin) {
             ctx.isCursorOnPage = true;
         }
         ctx.annotationUnderCursor = dm->GetAnnotationAtPos(cursorPos, nullptr);
+        if (currTab && currTab->selectedAnnotation) {
+            ctx.hasSelectedAnnotation = true;
+        }
 
         // PointF ptOnPage = dm->CvtFromScreen(cursorPos, pageNoUnderCursor);
         //  TODO: should this be point on page?
