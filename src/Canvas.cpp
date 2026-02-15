@@ -553,7 +553,7 @@ static void OnMouseMove(MainWindow* win, int x, int y, WPARAM) {
             win->selectionRect.dy = y - win->selectionRect.y;
             win->selectionMeasure = dm->CvtFromScreen(win->selectionRect).Size();
             OnSelectionEdgeAutoscroll(win, x, y);
-            ScheduleRepaint(win, 0);
+            win->RedrawAll();
             break;
         }
         case MouseAction::Dragging: {
@@ -2282,7 +2282,7 @@ static void OnTimer(MainWindow* win, HWND hwnd, WPARAM timerId) {
         case REPAINT_TIMER_ID:
             win->delayedRepaintTimer = 0;
             KillTimer(hwnd, REPAINT_TIMER_ID);
-            win->RedrawAllIncludingNonClient();
+            win->RedrawAll();
             break;
 
         case SMOOTHSCROLL_TIMER_ID:

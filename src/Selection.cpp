@@ -295,7 +295,7 @@ void UpdateTextSelection(MainWindow* win, bool select) {
     if (win->uiaProvider) {
         win->uiaProvider->OnSelectionChanged();
     }
-    ToolbarUpdateStateForWindow(win, false);
+    // ToolbarUpdateStateForWindow(win, false);
 }
 
 // isTextSelectionOut is set to true if this is text-only selection (as opposed to
