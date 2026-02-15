@@ -877,15 +877,23 @@ static void OnMouseLeftButtonUp(MainWindow* win, int x, int y, WPARAM key) {
         return;
     }
 
-    if (win->annotationUnderCursor) {
+    // Re-query annotation at click position since annotationUnderCursor
+    // may be stale (e.g. if a context menu was open during mouse move)
+    Annotation* annotAtClick = dm->GetAnnotationAtPos(pt, nullptr);
+    win->annotationUnderCursor = annotAtClick;
+
+    if (annotAtClick) {
         if (IsCtrlPressed()) {
             ShowEditAnnotationsWindow(tab);
         }
-        SetSelectedAnnotation(tab, win->annotationUnderCursor, true, false);
+        SetSelectedAnnotation(tab, annotAtClick, true, false);
         return;
     }
     else {
-        SetSelectedAnnotation(tab, nullptr, false, false);
+        // don't clear annotation selection if the edit annotations window is open
+        if (!tab->editAnnotsWindow) {
+            SetSelectedAnnotation(tab, nullptr, false, false);
+        }
         return;
     }
 
@@ -1041,9 +1049,19 @@ static void OnMouseRightButtonDown(MainWindow* win, int x, int y) {
     HwndSetFocus(win->hwndFrame);
 
     // select annotation under cursor on right-click (without centering)
-    if (win->annotationUnderCursor) {
-        WindowTab* tab = win->CurrentTab();
-        SetSelectedAnnotation(tab, win->annotationUnderCursor, true, false);
+    // Re-query annotation at click position since annotationUnderCursor
+    // may be stale (e.g. if a context menu was open during mouse move)
+    {
+        DisplayModel* dm = win->AsFixed();
+        if (dm) {
+            Point pt{x, y};
+            Annotation* annot = dm->GetAnnotationAtPos(pt, nullptr);
+            win->annotationUnderCursor = annot;
+            if (annot) {
+                WindowTab* tab = win->CurrentTab();
+                SetSelectedAnnotation(tab, annot, true, false);
+            }
+        }
     }
 
     win->dragStartPending = true;
