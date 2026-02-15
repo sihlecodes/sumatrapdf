@@ -1559,7 +1559,9 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
         HwndPositionInCenterOf(ew->hwnd, tab->win->hwndFrame);
     } else {
         LayoutAndSizeToContent(ew->mainLayout, dx, 0, ew->hwnd);
-        Rect r = ShiftRectToWorkArea(lastPos, ew->hwnd, true);
+        // don't pass ew->hwnd so ShiftRectToWorkArea uses MonitorFromRect
+        // with the saved position, not the monitor the window was initially created on
+        Rect r = ShiftRectToWorkArea(lastPos, nullptr, true);
         SetWindowPos(ew->hwnd, nullptr, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
     }
     Annotation* annot = ew->tab->selectedAnnotation;
@@ -1574,6 +1576,9 @@ void ShowEditAnnotationsWindow(WindowTab* tab) {
         DarkMode::setDarkWndNotifySafe(ew->hwnd);
         DarkMode::setWindowEraseBgSubclass(ew->hwnd);
     }
+
+    // keep the annotations window on top of the main window
+    SetWindowPos(ew->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 
     // important to call this after hooking up onSize to ensure
     // first layout is triggered
