@@ -55,7 +55,9 @@ extern "C" {
 static int kButtonSpacingX = 4;
 
 // distance between label and edit field
-constexpr int kTextPaddingRight = 6;
+constexpr int kTextPaddingRight = 4;
+
+constexpr int kBarPaddingY = 2;
 
 struct ToolbarButtonInfo {
     /* index in the toolbar bitmap (-1 for separators) */
@@ -580,14 +582,14 @@ void UpdateToolbarFindText(MainWindow* win) {
     int padding = GetSystemMetrics(SM_CXEDGE);
     int x = currX;
     int y = (findWndRect.dy - size.dy + 1) / 2 + currY;
-    MoveWindow(win->hwndFindLabel, x, y, size.dx, size.dy, TRUE);
+    MoveWindow(win->hwndFindLabel, x, y + 2, size.dx, size.dy, TRUE);
     x = currX + size.dx;
     y = currY;
-    MoveWindow(win->hwndFindBg, x, y, findWndRect.dx, findWndRect.dy, FALSE);
+    MoveWindow(win->hwndFindBg, x, y + kBarPaddingY, findWndRect.dx, findWndRect.dy, FALSE);
     x = currX + size.dx + padding;
-    y = (findWndRect.dy - size.dy + 1) / 2 + currY;
+    y = (findWndRect.dy - size.dy + 1) / kBarPaddingY + currY;
     int dx = findWndRect.dx - 2 * padding;
-    MoveWindow(win->hwndFindEdit, x, y, dx, size.dy, FALSE);
+    MoveWindow(win->hwndFindEdit, x, y + kBarPaddingY, dx, size.dy, FALSE);
 
     dx = size.dx + findWndRect.dx + 12;
     TbSetButtonDx(win->hwndToolbar, CmdFindFirst, dx);
@@ -994,7 +996,6 @@ void UpdateToolbarAfterThemeChange(MainWindow* win) {
 
 // https://docs.microsoft.com/en-us/windows/win32/controls/toolbar-control-reference
 void CreateToolbar(MainWindow* win) {
-    kButtonSpacingX = 0;
     HINSTANCE hinst = GetModuleHandle(nullptr);
     HWND hwndParent = win->hwndFrame;
 
@@ -1033,14 +1034,13 @@ void CreateToolbar(MainWindow* win) {
 
     TBMETRICS tbMetrics{};
     tbMetrics.cbSize = sizeof(tbMetrics);
-    // tbMetrics.dwMask = TBMF_PAD;
-    tbMetrics.dwMask = TBMF_BUTTONSPACING;
+    tbMetrics.dwMask = TBMF_BUTTONSPACING | TBMF_BARPAD | TBMF_PAD;
     TbGetMetrics(hwndToolbar, &tbMetrics);
     int yPad = DpiScale(win->hwndFrame, 2);
-    tbMetrics.cxPad += DpiScale(win->hwndFrame, 14);
+    tbMetrics.cxPad += DpiScale(win->hwndFrame, 16);
     tbMetrics.cyPad += yPad;
     tbMetrics.cxButtonSpacing += DpiScale(win->hwndFrame, kButtonSpacingX);
-    // tbMetrics.cyButtonSpacing += DpiScale(win->hwndFrame, 4);
+    tbMetrics.cyBarPad += DpiScale(win->hwndFrame, kBarPaddingY);
     TbSetMetrics(hwndToolbar, &tbMetrics);
 
     LRESULT exstyle = SendMessageW(hwndToolbar, TB_GETEXTENDEDSTYLE, 0, 0);
