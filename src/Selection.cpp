@@ -111,25 +111,118 @@ void DeleteOldSelectionInfo(MainWindow* win, bool alsoTextSel) {
 
 void PaintTransparentRectangles(HDC hdc, Rect screenRc, Vec<Rect>& rects, COLORREF selectionColor, u8 alpha,
                                 int margin) {
-    // create path from rectangles
-    Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+    // Use multiply blending so the selection highlight appears behind text.
+    // Dark text stays dark (dark × color ≈ dark), light background gets tinted.
     screenRc.Inflate(margin, margin);
+
+    u8 sr, sg, sb;
+    UnpackColor(selectionColor, sr, sg, sb);
+
     for (size_t i = 0; i < rects.size(); i++) {
         Rect rc = rects.at(i).Intersect(screenRc);
-        if (!rc.IsEmpty()) {
-            path.AddRectangle(ToGdipRect(rc));
+        if (rc.IsEmpty()) {
+            continue;
         }
+
+        int w = rc.dx;
+        int h = rc.dy;
+
+        // create a DIB section filled with the selection color
+        BITMAPINFO bmi{};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = w;
+        bmi.bmiHeader.biHeight = -h; // top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        void* bits = nullptr;
+        HBITMAP hbmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!hbmp) {
+            continue;
+        }
+
+        // fill with selection color (multiply blend: white background becomes the
+        // selection color, dark text stays dark)
+        u8* px = (u8*)bits;
+        // blend factor: how much of the selection color to apply vs original
+        // use alpha to control intensity, similar to the original alpha blending
+        u8 invAlpha = (u8)(255 - alpha);
+        for (int p = 0; p < w * h; p++) {
+            // pre-fill with a color that when multiplied gives the right tint
+            // we'll use MERGEPAINT-style approach below, so fill with selection color
+            px[0] = sb; // B
+            px[1] = sg; // G
+            px[2] = sr; // R
+            px[3] = 0;
+            px += 4;
+        }
+
+        HDC memDC = CreateCompatibleDC(hdc);
+        HGDIOBJ oldBmp = SelectObject(memDC, hbmp);
+
+        // First, capture what's currently on screen into a second bitmap
+        HDC screenDC = CreateCompatibleDC(hdc);
+        HBITMAP hScreenBmp = CreateCompatibleBitmap(hdc, w, h);
+        HGDIOBJ oldScreenBmp = SelectObject(screenDC, hScreenBmp);
+        BitBlt(screenDC, 0, 0, w, h, hdc, rc.x, rc.y, SRCCOPY);
+
+        // Multiply blend: for each pixel, result = (screen * selColor) / 255
+        // We read back both bitmaps and blend manually
+        BITMAPINFO bmi2{};
+        bmi2.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi2.bmiHeader.biWidth = w;
+        bmi2.bmiHeader.biHeight = -h;
+        bmi2.bmiHeader.biPlanes = 1;
+        bmi2.bmiHeader.biBitCount = 32;
+        bmi2.bmiHeader.biCompression = BI_RGB;
+
+        u8* screenBits = (u8*)malloc(w * h * 4);
+        if (screenBits) {
+            GetDIBits(screenDC, hScreenBmp, 0, h, screenBits, &bmi2, DIB_RGB_COLORS);
+
+            u8* src = screenBits;
+            u8* sel = (u8*)bits;
+            for (int p = 0; p < w * h; p++) {
+                // multiply blend with alpha control:
+                // result = lerp(original, original * selColor / 255, alpha / 255)
+                u8 ob = src[0], og = src[1], or_ = src[2];
+                u8 mb = (u8)((ob * sb) / 255);
+                u8 mg = (u8)((og * sg) / 255);
+                u8 mr = (u8)((or_ * sr) / 255);
+                sel[0] = (u8)((ob * invAlpha + mb * alpha) / 255);
+                sel[1] = (u8)((og * invAlpha + mg * alpha) / 255);
+                sel[2] = (u8)((or_ * invAlpha + mr * alpha) / 255);
+                src += 4;
+                sel += 4;
+            }
+
+            // write blended result back
+            SetDIBits(memDC, hbmp, 0, h, bits, &bmi, DIB_RGB_COLORS);
+            BitBlt(hdc, rc.x, rc.y, w, h, memDC, 0, 0, SRCCOPY);
+
+            free(screenBits);
+        }
+
+        SelectObject(screenDC, oldScreenBmp);
+        DeleteObject(hScreenBmp);
+        DeleteDC(screenDC);
+        SelectObject(memDC, oldBmp);
+        DeleteObject(hbmp);
+        DeleteDC(memDC);
     }
 
-    // fill path (and draw optional outline margin)
-    Gdiplus::Graphics gs(hdc);
-    u8 r, g, b;
-    UnpackColor(selectionColor, r, g, b);
-    Gdiplus::Color c(alpha, r, g, b);
-    Gdiplus::SolidBrush tmpBrush(c);
-    gs.FillPath(&tmpBrush, &path);
+    // draw outline margin
     if (margin) {
+        Gdiplus::GraphicsPath path(Gdiplus::FillModeWinding);
+        for (size_t i = 0; i < rects.size(); i++) {
+            Rect rc = rects.at(i).Intersect(screenRc);
+            if (!rc.IsEmpty()) {
+                path.AddRectangle(ToGdipRect(rc));
+            }
+        }
         path.Outline(nullptr, 0.2f);
+        Gdiplus::Graphics gs(hdc);
         Gdiplus::Pen tmpPen(Gdiplus::Color(alpha, 0, 0, 0), (float)margin);
         gs.DrawPath(&tmpPen, &path);
     }
